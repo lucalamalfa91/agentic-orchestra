@@ -95,7 +95,7 @@ def main():
     db_puml = call_ai(prompt_db, system_content="Sei un DBA che disegna ER diagram in PlantUML.")
     write_utf8("docs/db_design.puml", db_puml)
 
-    print("=== STEP1 completato (app-generated/design.yaml, docs, db_design.puml) ===")
+    print("=== STEP1 completato (generated_app/design.yaml, docs, db_design.puml) ===")
 
 if __name__ == "__main__":
     main()

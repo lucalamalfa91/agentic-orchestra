@@ -4,13 +4,18 @@ on:
   push:
     branches:
       - main
+    paths:
+      - backend/**
+      - frontend/**
+      - .github/workflows/deploy.yml
 
 env:
   REGISTRY: crsharedacrcorchn001.azurecr.io
-  BACKEND_IMAGE: todo-api
+  IMAGE_NAME: todo-api
+  AZURE_SUBSCRIPTION: shared-subscription
   RESOURCE_GROUP: rg-todo-app
   CONTAINER_APP_NAME: todo-api
-  STATIC_WEB_APP_NAME: todo-frontend
+  REGION: westeurope
 
 jobs:
   build-backend:
@@ -24,64 +29,39 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: '8.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore backend/
 
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
+      - name: Run backend tests
+        run: dotnet test backend/ --configuration Release --no-restore --logger "trx;LogFileName=test-results.trx"
 
-      - name: Run tests
-        run: dotnet test --configuration Release --no-build --verbosity normal
+      - name: Build backend
+        run: dotnet build backend/ --configuration Release --no-restore
 
-      - name: Publish
-        run: dotnet publish -c Release -o ./publish
-
-      - name: Azure Login
-        uses: azure/login@v1
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Get ACR credentials
-        id: acr-creds
-        run: |
-          ACR_USERNAME=$(az acr credential show --name crsharedacrcorchn001 --query username -o tsv)
-          ACR_PASSWORD=$(az acr credential show --name crsharedacrcorchn001 --query passwords[0].value -o tsv)
-          echo "ACR_USERNAME=$ACR_USERNAME" >> $GITHUB_OUTPUT
-          echo "ACR_PASSWORD=$ACR_PASSWORD" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ steps.acr-creds.outputs.ACR_USERNAME }}
-          password: ${{ steps.acr-creds.outputs.ACR_PASSWORD }}
+          login-server: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+        run: |
+          echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./backend
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          registry: ${{ env.REGISTRY }}
 
   build-frontend:
     runs-on: ubuntu-latest
@@ -92,28 +72,29 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18.x
-          cache: npm
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+        working-directory: frontend
 
-      - name: Run tests
+      - name: Run frontend tests
         run: npm test -- --coverage --watchAll=false
-        env:
-          CI: true
+        working-directory: frontend
 
-      - name: Build
+      - name: Build frontend
         run: npm run build
+        working-directory: frontend
         env:
-          REACT_APP_API_URL: https://todo-api.azurecontainerapps.io
+          VITE_API_URL: https://todo-api.azurecontainerapps.io
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v3
         with:
           name: frontend-build
-          path: build/
-          retention-days: 1
+          path: frontend/dist
 
   deploy:
     needs: [build-backend, build-frontend]
@@ -127,74 +108,46 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Deploy Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          registryUrl: ${{ env.REGISTRY }}
+          registryUsername: ${{ secrets.ACR_USERNAME }}
+          registryPassword: ${{ secrets.ACR_PASSWORD }}
+          containerAppName: ${{ env.CONTAINER_APP_NAME }}
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          targetPort: 8080
+          ingress: external
+          environmentVariables: |
+            ASPNETCORE_ENVIRONMENT=Production
+            ConnectionStrings__DefaultConnection=@Microsoft.KeyVault(SecretUri=https://keyvault-todo.vault.azure.net/secrets/db-connection-string/)
+
       - name: Download frontend build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: frontend-build
-          path: ./build
+          path: frontend/dist
 
-      - name: Deploy Backend to Container App
-        run: |
-          az containerapp update \
-            --name ${{ env.CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
-
-      - name: Wait for Container App deployment
-        run: |
-          for i in {1..30}; do
-            STATUS=$(az containerapp show \
-              --name ${{ env.CONTAINER_APP_NAME }} \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --query "properties.provisioningState" -o tsv)
-            if [ "$STATUS" = "Succeeded" ]; then
-              echo "Container App deployed successfully"
-              exit 0
-            fi
-            echo "Waiting for deployment... (attempt $i/30)"
-            sleep 10
-          done
-          echo "Deployment timeout"
-          exit 1
-
-      - name: Deploy Frontend to Static Web App
+      - name: Deploy Static Web App
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-          app_location: ./build
-          output_location: .
+          app_location: frontend/dist
+          output_location: frontend/dist
           skip_app_build: true
 
-      - name: Verify Backend Health
+      - name: Run smoke tests
         run: |
-          BACKEND_URL=$(az containerapp show \
-            --name ${{ env.CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --query "properties.configuration.ingress.fqdn" -o tsv)
-          
-          for i in {1..10}; do
-            HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://$BACKEND_URL/health)
-            if [ "$HEALTH" = "200" ]; then
-              echo "Backend health check passed"
-              exit 0
-            fi
-            echo "Health check attempt $i/10 - Status: $HEALTH"
-            sleep 5
-          done
-          echo "Backend health check failed"
-          exit 1
+          sleep 30
+          curl -f https://todo-api.azurecontainerapps.io/health || exit 1
 
       - name: Notify deployment success
         if: success()
-        run: |
-          echo "✅ Deployment completed successfully"
-          echo "Backend: https://todo-api.azurecontainerapps.io"
-          echo "Frontend: https://todo-frontend.azurestaticapps.net"
+        run: echo "Deployment completed successfully"
 
       - name: Notify deployment failure
         if: failure()
-        run: |
-          echo "❌ Deployment failed"
-          exit 1
+        run: echo "Deployment failed"

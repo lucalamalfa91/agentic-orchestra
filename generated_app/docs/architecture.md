@@ -1,362 +1,333 @@
 # Documento di Architettura - Applicazione Todo
 
-## Panoramica
+## 1. Panoramica
 
-L'applicazione Todo è una soluzione full-stack moderna per la gestione di attività personali. Implementa un'architettura client-server con frontend React e backend .NET 8, distribuita su Azure con infrastruttura containerizzata e storage persistente.
+L'applicazione Todo è una soluzione full-stack moderna per la gestione di attività personali. Implementa un'architettura a tre livelli con frontend React, backend .NET 8 e database SQLite, deployata su Azure Container Apps e Static Web App.
 
-L'applicazione consente agli utenti di creare, visualizzare, modificare, eliminare e completare attività in modo intuitivo, con sincronizzazione in tempo reale e persistenza dei dati.
-
----
-
-## Requisiti Funzionali
-
-### Gestione Todo
-
-- **Visualizzazione lista**: Mostrare tutti i todo dell'utente con titolo e stato di completamento
-- **Creazione**: Aggiungere nuovi todo tramite form con validazione del titolo
-- **Modifica**: Editare il titolo di un todo esistente tramite modal
-- **Eliminazione**: Rimuovere todo con conferma preventiva
-- **Toggle completamento**: Marcare/smarcare un todo come completato con cambio visivo immediato
-
-### Esperienza Utente
-
-- Caricamento dati al mount del componente
-- Gestione errori di caricamento con messaggi informativi
-- Messaggi di successo per operazioni completate
-- Form resettato dopo submit
-- Possibilità di annullare modifiche
-- Stili visivi differenti per todo completati
+L'applicazione consente agli utenti di creare, visualizzare, modificare, eliminare e completare attività attraverso un'interfaccia web intuitiva e responsiva.
 
 ---
 
-## Requisiti Non Funzionali
+## 2. Requisiti Funzionali
 
-### Performance
+### 2.1 Gestione Todo
 
-- Tempo di risposta API inferiore a 500ms
-- Caricamento lista entro 2 secondi
+- **Visualizzazione lista**: L'utente visualizza tutti i todo con titolo e stato completamento
+- **Creazione**: Aggiunta di nuovi todo tramite form con titolo obbligatorio
+- **Modifica**: Editing del titolo di un todo esistente con conferma
+- **Eliminazione**: Rimozione di todo con conferma preventiva
+- **Toggle completamento**: Marcatura di todo come completato/non completato
+
+### 2.2 Validazione
+
+- Titolo obbligatorio e lunghezza tra 1 e 255 caratteri
+- Validazione lato client e server
+- Messaggi di errore chiari all'utente
+
+### 2.3 Esperienza Utente
+
+- Caricamento automatico della lista al mount del componente
+- Aggiornamento istantaneo dell'interfaccia dopo operazioni
+- Gestione degli errori API con feedback visivo
+- Reset del form dopo creazione con successo
+
+---
+
+## 3. Requisiti Non Funzionali
+
+### 3.1 Performance
+
+- Tempo di risposta API inferiore a 2 secondi
+- Caricamento della pagina entro 3 secondi
 - Supporto fino a 10.000 todo per utente
 
-### Affidabilità
+### 3.2 Affidabilità
 
-- Disponibilità minima 99%
-- Persistenza garantita dei dati
-- Backup automatico del database
-- Health check ogni 10 secondi
+- Disponibilità del servizio 99.5%
+- Rollback automatico in caso di errore durante modifica
+- Gestione graceful dei timeout API
 
-### Scalabilità
+### 3.3 Scalabilità
 
 - Auto-scaling da 1 a 3 repliche del backend
 - Supporto per crescita futura di utenti
-- Architettura stateless per il backend
+- Database SQLite con indici ottimizzati
 
-### Sicurezza
+### 3.4 Sicurezza
 
-- HTTPS obbligatorio
+- HTTPS obbligatorio (TLS 1.2+)
 - CORS configurato per domini autorizzati
-- Rate limiting: 100 richieste per minuto
-- Validazione input lato server
-- Prevenzione SQL injection tramite EF Core
-- Gestione secrets con Azure Key Vault
+- Secrets gestiti in Azure KeyVault
+- Nessuna autenticazione richiesta (app pubblica)
 
-### Manutenibilità
+### 3.5 Manutenibilità
 
-- Codice documentato e testato
-- Migrazioni database versionabili
+- Copertura test backend 80%
+- Copertura test frontend 75%
+- Documentazione API con OpenAPI 3.0
 - Logging centralizzato con Application Insights
-- CI/CD automatizzato con GitHub Actions
 
 ---
 
-## Architettura Logica
+## 4. Architettura Logica
 
-### Livelli Applicativi
+### 4.1 Livelli Applicativi
 
 **Presentation Layer (Frontend)**
-- Componenti React per UI
-- Custom hook useTodos per gestione stato
-- Client HTTP Axios per comunicazione API
+- Componenti React per visualizzazione e interazione
+- Gestione dello stato locale con hooks
+- Validazione lato client
 - Styling con Tailwind CSS
 
-**API Layer (Backend)**
-- Minimal API .NET 8
-- Endpoint RESTful per operazioni CRUD
-- Validazione richieste
-- Gestione errori centralizzata
+**Business Logic Layer (Backend)**
+- Servizi per logica di business
+- Validazione dati
+- Orchestrazione operazioni database
+- Gestione errori e logging
 
-**Business Logic Layer**
-- TodoService per logica di business
-- Validazioni di dominio
-- Orchestrazione operazioni
-
-**Data Access Layer**
-- Entity Framework Core ORM
-- TodoContext per accesso database
-- Migrazioni database
+**Data Access Layer (Backend)**
+- Entity Framework Core per ORM
+- Migrations per versionamento schema
 - Query ottimizzate con indici
+- Transazioni per consistenza dati
 
 **Data Layer**
-- SQLite per persistenza
+- SQLite come database relazionale
 - Tabella Todo con campi Id, Title, IsCompleted, CreatedAt, UpdatedAt
-- Indici su CreatedAt e IsCompleted
 
-### Flusso Dati
+### 4.2 Componenti Frontend
 
-1. Frontend invia richiesta HTTP tramite Axios
-2. Backend riceve e valida richiesta
-3. TodoService elabora logica business
-4. EF Core interagisce con SQLite
-5. Risposta ritorna al frontend
-6. React aggiorna stato e UI
+**TodoList**: Componente principale che gestisce la lista, lo stato di caricamento e gli errori
+
+**TodoItem**: Elemento singolo con azioni di modifica, eliminazione e toggle
+
+**TodoForm**: Form riutilizzabile per creazione e modifica con validazione
+
+**useTodos Hook**: Logica centralizzata per comunicazione con API e gestione stato
+
+### 4.3 Endpoint API
+
+- GET /todos: Recupera lista completa
+- POST /todos: Crea nuovo todo
+- GET /todos/{id}: Recupera singolo todo
+- PUT /todos/{id}: Aggiorna titolo
+- DELETE /todos/{id}: Elimina todo
+- PATCH /todos/{id}/toggle: Toggle completamento
+- GET /health: Health check per monitoring
 
 ---
 
-## Architettura Fisica (Azure)
+## 5. Architettura Fisica (Azure)
 
-### Componenti Infrastrutturali
+### 5.1 Componenti Azure
 
-**Container App (todo-api)**
-- Hosting backend .NET 8
-- CPU: 0.5 core
-- Memoria: 1GB
-- Repliche: 1-3 (auto-scaling)
-- Porta: 8080
-- Health probe HTTP ogni 10 secondi
-- Immagine da Azure Container Registry
+**Azure Container Apps (todo-api)**
+- Hosting del backend .NET 8
+- CPU: 0.5 core, Memoria: 1GB
+- Auto-scaling: 1-3 repliche
+- Ingress esterno sulla porta 8080
+- Health check ogni 10 secondi
 
-**Static Web App (todo-frontend)**
-- Hosting frontend React
+**Azure Static Web App (todo-frontend)**
+- Hosting del frontend React
 - Build automatico da GitHub
-- Distribuzione globale tramite CDN
-- SKU Standard
-- Integrazione CI/CD nativa
-
-**Container Registry (ACR)**
-- Nome: crsharedacrcorchn001
-- SKU: Standard
-- Repository: todo-api
-- Gestione versioni immagini
-
-**Storage Account (todo-db)**
-- Backup SQLite
-- SKU: Standard_LRS
-- Tipo: StorageV2
-- Tier: Hot
-
-**Key Vault (todo-keyvault)**
-- Gestione secrets
-- Connection string database
-- SKU: Standard
-
-**Application Insights (todo-appinsights)**
-- Monitoring e logging
-- Retention: 30 giorni
-- Metriche custom
-- Alert configurati
-
-### Rete e Connettività
-
-- Regione: West Europe
-- Resource Group: rg-todo-app
-- CORS abilitato per domini autorizzati
+- CDN globale per distribuzione
+- Custom domain: todo.example.com
 - HTTPS obbligatorio
-- Ingress esterno per Container App
+
+**Azure Container Registry (crsharedacrcorchn001)**
+- Registro centralizzato per immagini Docker
+- Versioning con tag latest
+- Accesso da Container Apps
+
+**Azure KeyVault (keyvault-todo)**
+- Gestione centralizzata secrets
+- Connection string database
+- API keys
+- Rotazione automatica ogni 90 giorni
+
+**Application Insights (appinsights-todo)**
+- Monitoring e logging centralizzato
+- Retention 30 giorni
+- Sampling al 100%
+- Metriche custom e alert
+
+### 5.2 Flusso Deployment
+
+GitHub Actions monitora il branch main e triggera pipeline automatica:
+
+1. Build Backend: Compilazione .NET, test, build immagine Docker, push su ACR
+2. Build Frontend: Setup Node, test, build production, deploy su Static Web App
+3. Deploy Backend: Aggiornamento Container App, smoke test, notifiche
 
 ---
 
-## Flussi Principali
+## 6. Flussi Principali
 
-### Flusso 1: Visualizzazione Lista Todo
+### 6.1 Flusso Visualizzazione Todo
 
 1. Utente accede all'applicazione
-2. Componente TodoList monta
-3. Hook useTodos chiama API GET /todos
-4. Backend recupera todo da SQLite
-5. Risposta JSON ritorna al frontend
-6. React renderizza lista con TodoItem per ogni elemento
-7. Se lista vuota, mostra messaggio appropriato
-8. Se errore, mostra notifica di errore
+2. Componente TodoList monta e chiama useTodos hook
+3. Hook esegue GET /todos verso API
+4. Backend recupera dati da database
+5. Risposta JSON con array di todo
+6. Frontend renderizza lista con Tailwind CSS
+7. Gestione errore se API non disponibile
 
-### Flusso 2: Creazione Nuovo Todo
+### 6.2 Flusso Creazione Todo
 
 1. Utente compila form con titolo
-2. Bottone submit disabilitato se titolo vuoto
-3. Submit invia POST /todos con payload {title}
-4. Backend valida titolo (1-255 caratteri)
-5. TodoService crea nuovo Todo
-6. EF Core salva in SQLite
-7. API ritorna todo creato con id
-8. Frontend aggiunge todo in cima alla lista
-9. Form resettato
-10. Messaggio di successo visualizzato
+2. Validazione lato client (lunghezza, non vuoto)
+3. Submit invia POST /todos con payload JSON
+4. Backend valida dati
+5. TodoService crea record in database
+6. Database ritorna todo con Id generato
+7. Frontend aggiunge todo in lista
+8. Form resetta per nuova creazione
+9. Feedback visivo di successo
 
-### Flusso 3: Modifica Todo
+### 6.3 Flusso Modifica Todo
 
-1. Utente clicca su todo
-2. Modal edit apre con titolo pre-compilato
-3. Utente modifica titolo
-4. Validazione titolo non vuoto
-5. Submit invia PUT /todos/{id} con {title, isCompleted}
-6. Backend valida e aggiorna
-7. EF Core salva in SQLite
-8. API ritorna todo aggiornato
-9. Frontend aggiorna lista in tempo reale
-10. Modal chiude
-11. Messaggio di successo
+1. Utente clicca edit su todo
+2. Modal/inline edit mostra titolo attuale
+3. Utente modifica testo
+4. Validazione lato client
+5. Submit invia PUT /todos/{id} con nuovo titolo
+6. Backend valida e aggiorna record
+7. Frontend aggiorna todo in lista
+8. Rollback UI se errore API
+9. Conferma visiva di salvataggio
 
-### Flusso 4: Eliminazione Todo
+### 6.4 Flusso Eliminazione Todo
 
-1. Utente clicca bottone delete
-2. Modal di conferma appare
+1. Utente clicca delete su todo
+2. Modal di conferma chiede conferma
 3. Utente conferma eliminazione
-4. Frontend invia DELETE /todos/{id}
-5. Backend elimina da SQLite
-6. API ritorna 204 No Content
-7. Frontend rimuove todo dalla lista
-8. Messaggio di successo visualizzato
+4. DELETE /todos/{id} inviato al backend
+5. Backend rimuove record da database
+6. Frontend rimuove todo da lista
+7. Gestione errore se eliminazione fallisce
 
-### Flusso 5: Toggle Completamento
+### 6.5 Flusso Toggle Completamento
 
 1. Utente clicca checkbox su todo
-2. Frontend invia PATCH /todos/{id}/toggle
-3. Backend inverte isCompleted
-4. EF Core salva in SQLite
-5. API ritorna todo aggiornato
-6. Frontend aggiorna stato immediato
-7. Stile visivo cambia (strikethrough, opacità)
-8. Persistenza garantita
+2. PATCH /todos/{id}/toggle inviato
+3. Backend inverte IsCompleted
+4. Frontend aggiorna UI istantaneamente
+5. Stile differente per todo completati (strikethrough, opacità)
+6. Aggiornamento senza reload pagina
 
 ---
 
-## Sicurezza e Scalabilità
+## 7. Sicurezza e Scalabilità
 
-### Misure di Sicurezza
+### 7.1 Sicurezza
 
-**Autenticazione e Autorizzazione**
-- Attualmente nessuna autenticazione (pubblico)
-- Pronto per integrazione OAuth2/JWT
-- CORS limita accesso a domini autorizzati
+**Comunicazione**
+- HTTPS obbligatorio su tutti gli endpoint
+- TLS 1.2 come versione minima
+- Certificati gestiti da Azure
 
-**Protezione Dati**
-- HTTPS obbligatorio su tutti i canali
-- Secrets gestiti in Azure Key Vault
-- Connection string non hardcoded
-- Variabili ambiente per configurazione sensibile
+**CORS**
+- Whitelist di domini autorizzati
+- Metodi HTTP limitati (GET, POST, PUT, DELETE, PATCH)
+- Headers Content-Type e Authorization consentiti
 
-**Validazione Input**
-- Titolo obbligatorio e lunghezza 1-255 caratteri
-- Validazione lato server con EF Core
-- Prevenzione SQL injection tramite query parametrizzate
-- Rate limiting: 100 richieste/minuto
+**Secrets Management**
+- Connection string in Azure KeyVault
+- Variabili d'ambiente per configurazione sensibile
+- Nessun secret in codice sorgente
+- Rotazione automatica ogni 90 giorni
 
-**Logging e Monitoring**
-- Application Insights traccia errori
-- Log level: Information
-- Alert su error rate > 5%
-- Audit trail delle operazioni
+**Autenticazione**
+- App pubblica senza autenticazione
+- Nessun token JWT o API key richiesto
+- Adatto per uso personale/demo
 
-### Strategie di Scalabilità
+### 7.2 Scalabilità
 
-**Orizzontale (Backend)**
-- Auto-scaling Container App: 1-3 repliche
-- Load balancing automatico
-- Stateless design per facilità scaling
-- Nessuna sessione locale
-
-**Verticale (Database)**
-- Indici su CreatedAt e IsCompleted
-- Query ottimizzate
-- Possibilità migrazione a SQL Server
-- Backup automatico su Storage Account
+**Backend**
+- Auto-scaling da 1 a 3 repliche in Container Apps
+- Load balancing automatico tra repliche
+- Stateless design per scalabilità orizzontale
+- Database SQLite con indice su CreatedAt
 
 **Frontend**
-- CDN globale tramite Static Web App
-- Caching assets statici
-- Lazy loading componenti
-- Ottimizzazione bundle
+- CDN globale di Static Web App
+- Caching di asset statici
+- Lazy loading di componenti
+- Ottimizzazione bundle con Vite
 
-**API**
-- Endpoint RESTful leggeri
-- Minimal API riduce overhead
-- Compressione response
-- Caching HTTP headers
+**Database**
+- SQLite adatto per carichi moderati
+- Indice su CreatedAt per query efficienti
+- Possibilità di migrazione a SQL Server in futuro
+- Backup automatico tramite Azure
 
-### Monitoraggio Scalabilità
+### 7.3 Monitoring e Osservabilità
 
-- Metrica TodoCreated: conteggio creazioni
-- Metrica TodoDeleted: conteggio eliminazioni
-- Metrica ApiResponseTime: istogramma latenza
-- Alert su memory usage > 80%
-- Alert su availability < 99%
+**Application Insights**
+- Tracciamento di tutte le richieste API
+- Metriche custom: TodoCreated, TodoDeleted, ApiResponseTime
+- Logging centralizzato con livello Information
+- Retention 30 giorni
 
----
+**Alert**
+- Notifica se error rate > 5%
+- Notifica se response time > 2 secondi
+- Email notification per escalation
 
-## Deployment e CI/CD
+**Health Check**
+- Endpoint /health controllato ogni 10 secondi
+- Timeout 5 secondi, threshold 3 fallimenti
+- Restart automatico di repliche non healthy
 
-### Pipeline GitHub Actions
+### 7.4 Disaster Recovery
 
-**Trigger**: Push su branch main
+**Backup**
+- Database SQLite con snapshot giornaliero
+- Codice sorgente versionato su GitHub
+- Immagini Docker in Container Registry
 
-**Stage 1: Build Backend**
-- Checkout codice
-- Setup .NET 8
-- Restore dipendenze
-- Build soluzione
-- Esecuzione test xUnit
-- Publish artefatti
-
-**Stage 2: Build Frontend**
-- Checkout codice
-- Setup Node 18
-- Install dipendenze npm
-- Esecuzione test Jest
-- Build React (output: build/)
-
-**Stage 3: Push to ACR**
-- Docker build immagine
-- Tag: crsharedacrcorchn001.azurecr.io/todo-api:latest
-- Push a Azure Container Registry
-
-**Stage 4: Deploy Backend**
-- Deploy Container App
-- Aggiornamento immagine
-- Health check automatico
-
-**Stage 5: Deploy Frontend**
-- Deploy Static Web App
-- Publish artefatti build/
-- Invalidazione cache CDN
+**Rollback**
+- Versioning di immagini Docker con tag
+- Possibilità di rollback a versione precedente
+- Zero-downtime deployment con blue-green
 
 ---
 
-## Tecnologie Stack
+## 8. Tecnologie Stack
 
 ### Backend
-- Runtime: .NET 8
-- Framework: Minimal API
+- Framework: .NET 8 con Minimal API
 - ORM: Entity Framework Core 8.0
 - Database: SQLite
-- Testing: xUnit + Moq
+- Testing: xUnit
+- Logging: Application Insights
 
 ### Frontend
-- Runtime: Node 18.x
-- Framework: React 18
-- HTTP Client: Axios 1.x
-- Styling: Tailwind CSS 3.x
-- Testing: Jest + React Testing Library
+- Framework: React 18+
+- Styling: Tailwind CSS
+- Build Tool: Vite
+- Testing: Jest
+- HTTP Client: Fetch API
 
-### Infrastruttura
-- Container: Docker
-- Orchestrazione: Azure Container Apps
+### Infrastructure
+- Container Orchestration: Azure Container Apps
+- Static Hosting: Azure Static Web App
 - Registry: Azure Container Registry
-- Hosting Frontend: Azure Static Web App
-- Storage: Azure Storage Account
-- Secrets: Azure Key Vault
-- Monitoring: Azure Application Insights
+- Secrets: Azure KeyVault
+- Monitoring: Application Insights
 - CI/CD: GitHub Actions
 
 ---
 
-## Conclusioni
+## 9. Roadmap Futura
 
-L'architettura proposta fornisce una soluzione scalabile, sicura e manutenibile per la gestione di todo. La separazione netta tra frontend e backend, combinata con l'infrastruttura Azure, garantisce affidabilità, performance e facilità di evoluzione futura. Il design stateless del backend consente scaling orizzontale trasparente, mentre il database SQLite offre semplicità con possibilità di migrazione verso soluzioni più robuste.
+- Autenticazione utente con Azure AD
+- Migrazione a SQL Server per carichi elevati
+- Sincronizzazione offline con Service Worker
+- Categorie e tag per todo
+- Condivisione liste con altri utenti
+- Mobile app nativa
+- Notifiche push per reminder
