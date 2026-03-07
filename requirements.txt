@@ -1,0 +1,6 @@
+Todo App semplice:
+- FE: React lista todo (aggiungi, cancella, toggle completo)
+- BE: .NET 8 Minimal API, SQLite EF Core, endpoints /todos GET/POST/PUT/DELETE
+- Deploy: Azure Container Apps (BE), Static Web App (FE), usa ACR crsharedacrcorchn001
+- Test: xUnit BE, Jest FE, GitHub Actions CI/CD
+- Responsive, Tailwind CSS
