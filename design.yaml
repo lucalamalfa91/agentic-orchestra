@@ -1,0 +1,516 @@
+user_stories:
+  - id: US001
+    title: Visualizzare lista di todo
+    description: Come utente voglio visualizzare tutti i miei todo per gestire le attività
+    acceptance_criteria:
+      - Deve mostrare lista vuota se non ci sono todo
+      - Deve visualizzare titolo e stato completamento
+      - Deve caricare i dati al mount del componente
+      - Deve gestire errori di caricamento
+
+  - id: US002
+    title: Aggiungere nuovo todo
+    description: Come utente voglio aggiungere un nuovo todo alla lista
+    acceptance_criteria:
+      - Form con campo titolo obbligatorio
+      - Bottone submit disabilitato se titolo vuoto
+      - Nuovo todo aggiunto in cima alla lista
+      - Form resettato dopo submit
+      - Deve mostrare messaggio di successo
+
+  - id: US003
+    title: Modificare todo esistente
+    description: Come utente voglio modificare il titolo di un todo
+    acceptance_criteria:
+      - Click su todo apre modal di edit
+      - Campo titolo pre-compilato
+      - Validazione titolo non vuoto
+      - Salvataggio aggiorna lista in tempo reale
+      - Possibilità di annullare modifica
+
+  - id: US004
+    title: Eliminare todo
+    description: Come utente voglio eliminare un todo dalla lista
+    acceptance_criteria:
+      - Bottone delete su ogni todo
+      - Conferma prima di eliminare
+      - Todo rimosso dalla lista dopo conferma
+      - Messaggio di successo
+
+  - id: US005
+    title: Toggle completamento todo
+    description: Come utente voglio marcare un todo come completato
+    acceptance_criteria:
+      - Checkbox per marcare completato
+      - Cambio stato immediato
+      - Stile visivo differente per completati
+      - Persistenza dello stato
+
+api:
+  base_url: https://todo-api.azurecontainerapps.io
+  endpoints:
+    - path: /todos
+      method: GET
+      description: Recupera lista di tutti i todo
+      response_code: 200
+      response_schema:
+        type: array
+        items:
+          type: object
+          properties:
+            id:
+              type: integer
+            title:
+              type: string
+            isCompleted:
+              type: boolean
+            createdAt:
+              type: string
+              format: date-time
+
+    - path: /todos
+      method: POST
+      description: Crea nuovo todo
+      request_schema:
+        type: object
+        required:
+          - title
+        properties:
+          title:
+            type: string
+            minLength: 1
+            maxLength: 255
+      response_code: 201
+      response_schema:
+        type: object
+        properties:
+          id:
+            type: integer
+          title:
+            type: string
+          isCompleted:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+
+    - path: /todos/{id}
+      method: GET
+      description: Recupera singolo todo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      response_code: 200
+      response_schema:
+        type: object
+        properties:
+          id:
+            type: integer
+          title:
+            type: string
+          isCompleted:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+
+    - path: /todos/{id}
+      method: PUT
+      description: Aggiorna todo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      request_schema:
+        type: object
+        required:
+          - title
+          - isCompleted
+        properties:
+          title:
+            type: string
+            minLength: 1
+            maxLength: 255
+          isCompleted:
+            type: boolean
+      response_code: 200
+      response_schema:
+        type: object
+        properties:
+          id:
+            type: integer
+          title:
+            type: string
+          isCompleted:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+
+    - path: /todos/{id}
+      method: DELETE
+      description: Elimina todo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      response_code: 204
+
+    - path: /todos/{id}/toggle
+      method: PATCH
+      description: Toggle completamento todo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      response_code: 200
+      response_schema:
+        type: object
+        properties:
+          id:
+            type: integer
+          title:
+            type: string
+          isCompleted:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+
+database:
+  type: SQLite
+  connection_string: Data Source=todos.db
+  tables:
+    - name: Todo
+      description: Tabella principale per i todo
+      fields:
+        - name: Id
+          type: int
+          primary_key: true
+          auto_increment: true
+          nullable: false
+
+        - name: Title
+          type: string
+          max_length: 255
+          nullable: false
+          description: Titolo del todo
+
+        - name: IsCompleted
+          type: bool
+          nullable: false
+          default_value: false
+          description: Stato di completamento
+
+        - name: CreatedAt
+          type: datetime
+          nullable: false
+          default_value: CURRENT_TIMESTAMP
+          description: Data creazione
+
+        - name: UpdatedAt
+          type: datetime
+          nullable: true
+          description: Data ultimo aggiornamento
+
+      indexes:
+        - name: IX_Todo_CreatedAt
+          columns:
+            - CreatedAt
+          order: DESC
+
+        - name: IX_Todo_IsCompleted
+          columns:
+            - IsCompleted
+
+backend:
+  framework: .NET 8
+  api_type: Minimal API
+  orm: Entity Framework Core
+  project_structure:
+    - path: Program.cs
+      description: Configurazione applicazione e middleware
+
+    - path: Models/Todo.cs
+      description: Modello dati Todo
+
+    - path: Data/TodoContext.cs
+      description: DbContext EF Core
+
+    - path: Endpoints/TodoEndpoints.cs
+      description: Definizione endpoint API
+
+    - path: Services/TodoService.cs
+      description: Logica business
+
+    - path: Migrations/
+      description: Migrazioni database
+
+  dependencies:
+    - name: Microsoft.EntityFrameworkCore
+      version: 8.0.0
+
+    - name: Microsoft.EntityFrameworkCore.Sqlite
+      version: 8.0.0
+
+    - name: Microsoft.AspNetCore.Cors
+      version: 8.0.0
+
+  cors_policy:
+    allowed_origins:
+      - https://todo-frontend.azurestaticapps.net
+      - http://localhost:3000
+    allowed_methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - PATCH
+    allowed_headers:
+      - Content-Type
+      - Authorization
+
+frontend:
+  framework: React 18
+  styling: Tailwind CSS
+  package_manager: npm
+  node_version: 18.x
+  project_structure:
+    - path: src/components/TodoList.jsx
+      description: Componente lista todo
+
+    - path: src/components/TodoForm.jsx
+      description: Form aggiunta/modifica todo
+
+    - path: src/components/TodoItem.jsx
+      description: Singolo item todo
+
+    - path: src/hooks/useTodos.js
+      description: Custom hook per gestione stato
+
+    - path: src/services/api.js
+      description: Client HTTP per API
+
+    - path: src/pages/Home.jsx
+      description: Pagina principale
+
+    - path: src/App.jsx
+      description: Root component
+
+  dependencies:
+    - name: react
+      version: 18.x
+
+    - name: react-dom
+      version: 18.x
+
+    - name: axios
+      version: 1.x
+
+    - name: tailwindcss
+      version: 3.x
+
+    - name: @tailwindcss/forms
+      version: 0.5.x
+
+  environment_variables:
+    - name: REACT_APP_API_URL
+      dev_value: http://localhost:5000
+      prod_value: https://todo-api.azurecontainerapps.io
+
+testing:
+  backend:
+    framework: xUnit
+    mocking: Moq
+    test_projects:
+      - name: TodoApi.Tests
+        description: Unit test per API endpoints
+        test_files:
+          - TodoEndpointsTests.cs
+          - TodoServiceTests.cs
+          - TodoContextTests.cs
+
+  frontend:
+    framework: Jest
+    testing_library: React Testing Library
+    test_files:
+      - TodoList.test.jsx
+      - TodoForm.test.jsx
+      - TodoItem.test.jsx
+      - useTodos.test.js
+      - api.test.js
+
+azure:
+  subscription: shared-subscription
+  resource_group: rg-todo-app
+  region: westeurope
+  acr:
+    name: crsharedacrcorchn001
+    sku: Standard
+
+  resources:
+    - name: todo-api
+      type: ContainerApp
+      description: Backend API .NET 8
+      properties:
+        image: crsharedacrcorchn001.azurecr.io/todo-api:latest
+        cpu: 0.5
+        memory: 1Gi
+        replicas_min: 1
+        replicas_max: 3
+        environment_variables:
+          - name: ASPNETCORE_ENVIRONMENT
+            value: Production
+          - name: ConnectionStrings__DefaultConnection
+            secret_ref: db-connection-string
+        ingress:
+          external: true
+          target_port: 8080
+          traffic_weight: 100
+        health_probe:
+          type: HTTP
+          path: /health
+          interval_seconds: 10
+          timeout_seconds: 3
+          failure_threshold: 3
+
+    - name: todo-frontend
+      type: StaticWebApp
+      description: Frontend React
+      properties:
+        source:
+          provider: GitHub
+          owner: organization
+          repo: todo-app
+          branch: main
+        build_properties:
+          app_location: /
+          output_location: build
+          app_build_command: npm run build
+        sku: Standard
+        environment_variables:
+          - name: REACT_APP_API_URL
+            value: https://todo-api.azurecontainerapps.io
+
+    - name: todo-db
+      type: Storage Account
+      description: Storage per SQLite backup
+      properties:
+        sku: Standard_LRS
+        kind: StorageV2
+        access_tier: Hot
+
+    - name: todo-keyvault
+      type: Key Vault
+      description: Gestione secrets
+      properties:
+        sku: standard
+        secrets:
+          - name: db-connection-string
+            value: Data Source=/data/todos.db
+
+    - name: todo-appinsights
+      type: Application Insights
+      description: Monitoring e logging
+      properties:
+        application_type: web
+        retention_days: 30
+
+  deployment:
+    pipeline: GitHub Actions
+    triggers:
+      - event: push
+        branch: main
+    stages:
+      - name: Build Backend
+        steps:
+          - action: checkout
+          - action: setup-dotnet
+            version: 8.0.x
+          - action: restore-dependencies
+          - action: build
+          - action: run-tests
+          - action: publish
+
+      - name: Build Frontend
+        steps:
+          - action: checkout
+          - action: setup-node
+            version: 18.x
+          - action: install-dependencies
+          - action: run-tests
+          - action: build
+
+      - name: Push to ACR
+        steps:
+          - action: docker-build
+            dockerfile: Dockerfile
+            image_name: todo-api
+            registry: crsharedacrcorchn001
+
+      - name: Deploy Backend
+        steps:
+          - action: deploy-container-app
+            resource: todo-api
+            image: crsharedacrcorchn001.azurecr.io/todo-api:latest
+
+      - name: Deploy Frontend
+        steps:
+          - action: deploy-static-web-app
+            resource: todo-frontend
+            artifact_path: build
+
+monitoring:
+  application_insights:
+    enabled: true
+    log_level: Information
+    custom_metrics:
+      - name: TodoCreated
+        type: counter
+
+      - name: TodoDeleted
+        type: counter
+
+      - name: ApiResponseTime
+        type: histogram
+
+  alerts:
+    - name: HighErrorRate
+      condition: error_rate > 5%
+      action: email
+
+    - name: ContainerAppDown
+      condition: availability < 99%
+      action: email
+
+    - name: HighMemoryUsage
+      condition: memory_usage > 80%
+      action: email
+
+security:
+  cors_enabled: true
+  https_only: true
+  authentication: None
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+  input_validation:
+    title_max_length: 255
+    title_required: true
+  sql_injection_prevention: EF Core parameterized queries
+  secrets_management: Azure Key Vault
+
+documentation:
+  api_docs: Swagger/OpenAPI
+  readme_sections:
+    - Setup locale
+    - Configurazione Azure
+    - Deploy procedure
+    - Testing
+    - Troubleshooting
+  architecture_diagram: C4 Model

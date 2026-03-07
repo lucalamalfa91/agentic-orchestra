@@ -1,0 +1,27 @@
+```plantuml
+@startuml Todo_ER_Diagram
+
+entity Todo {
+  * Id : int <<PK, AI>>
+  --
+  * Title : string(255)
+  * IsCompleted : bool
+  * CreatedAt : datetime
+  UpdatedAt : datetime
+}
+
+note right of Todo
+  Tabella principale per la gestione dei todo
+  
+  Indici:
+  - IX_Todo_CreatedAt (DESC)
+  - IX_Todo_IsCompleted
+  
+  Vincoli:
+  - Title: NOT NULL, lunghezza 1-255
+  - IsCompleted: NOT NULL, default FALSE
+  - CreatedAt: NOT NULL, default CURRENT_TIMESTAMP
+end note
+
+@enduml
+```
