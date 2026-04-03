@@ -10,18 +10,20 @@ def main():
 
     {design}
 
-    Scrivi il contenuto COMPLETO del file Program.cs per una .NET 8 Minimal API
-    che espone CRUD /todos con EF Core SQLite (DbContext TodoDb, entity Todo con Id, Title, IsCompleted).
+    Write the COMPLETE content of Program.cs file for a .NET 8 Minimal API
+    that exposes CRUD /todos with EF Core SQLite (DbContext TodoDb, entity Todo with Id, Title, IsCompleted).
 
-    Vincoli IMPORTANTI:
-    - NON usare blocchi di codice markdown.
-    - NON usare marcatori di linguaggio (niente ```csharp, niente ```).
-    - Rispondi SOLO con codice C# di Program.cs, pronto da compilare.
+    CRITICAL CONSTRAINTS:
+    - DO NOT use markdown code blocks
+    - DO NOT use language markers (no ```csharp, no ```)
+    - Respond ONLY with C# code for Program.cs, ready to compile
+    - Write ALL code, comments, variable names, strings in ENGLISH only
+    - Use English for all entity names, properties, endpoints, error messages
     """
 
     program_cs = call_ai(
         prompt,
-        system_content="Sei un senior .NET backend engineer. Produci solo codice C# valido, senza markdown."
+        system_content="You are a senior .NET backend engineer. Produce only valid C# code, no markdown. Write EVERYTHING in English only."
     )
     app_tsx = strip_markdown_fences(program_cs)
     write_utf8("backend/Program.cs", program_cs)

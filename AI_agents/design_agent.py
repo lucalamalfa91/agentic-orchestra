@@ -2,10 +2,10 @@
 from .ai_utils import call_ai, write_utf8
 
 def main():
-    print("=== STEP1: design + architettura + DB ===")
+    print("=== STEP1: design + architecture + DB ===")
 
     reqs = """
-    Todo App semplice:
+    Simple Todo App:
     - FE: React + Tailwind (add/edit/delete/toggle todos)
     - BE: .NET 8 Minimal API + EF Core SQLite (/todos CRUD)
     - Deploy: Azure Container Apps (BE) + Static Web App (FE)
@@ -15,11 +15,11 @@ def main():
 
     # 1) DESIGN YAML
     prompt_design = f"""
-    Requisiti business:
+    Business requirements:
 
     {reqs}
 
-    Genera SOLO YAML (nessun markdown, nessun blocco di codice):
+    Generate ONLY YAML (no markdown, no code blocks):
     user_stories:
       - id: US001
         title: ...
@@ -44,43 +44,53 @@ def main():
           type: ContainerApp
         - name: todo-frontend
           type: StaticWebApp
+
+    CRITICAL CONSTRAINTS:
+    - Write EVERYTHING in English (field names, descriptions, comments)
+    - No emojis, no markdown fences
+    - Clean YAML only
     """
 
     design_yaml = call_ai(
         prompt_design,
-        system_content="Sei un architect .NET/React/Azure. YAML pulito, senza emoji e senza markdown."
+        system_content="You are a .NET/React/Azure architect. Generate clean YAML, no emojis, no markdown. Write EVERYTHING in English only."
     )
     print(design_yaml[:200])
     write_utf8("design.yaml", design_yaml)
 
-    # 2) DOCUMENTAZIONE ARCHITETTURALE
+    # 2) ARCHITECTURE DOCUMENTATION
     prompt_arch = f"""
-    A partire da questo design YAML:
+    Based on this design YAML:
 
     {design_yaml}
 
-    Scrivi un documento di architettura in Markdown con sezioni:
-    # Panoramica
-    # Requisiti funzionali
-    # Requisiti non funzionali
-    # Architettura logica
-    # Architettura fisica (Azure: ACA, SWA, ACR, DB)
-    # Flussi principali
-    # Sicurezza e scalabilità
+    Write an architecture document in Markdown with sections:
+    # Overview
+    # Functional Requirements
+    # Non-Functional Requirements
+    # Logical Architecture
+    # Physical Architecture (Azure: ACA, SWA, ACR, DB)
+    # Main Flows
+    # Security and Scalability
 
-    Usa Markdown semplice (titoli, liste), niente blocchi di codice.
+    Use simple Markdown (headings, lists), no code blocks.
+
+    CRITICAL: Write EVERYTHING in English (all text, headings, descriptions).
     """
 
-    arch_doc = call_ai(prompt_arch, system_content="Sei un architect software, documentazione chiara.")
+    arch_doc = call_ai(
+        prompt_arch,
+        system_content="You are a software architect writing clear documentation. Write EVERYTHING in English only."
+    )
     write_utf8("docs/architecture.md", arch_doc)
 
-    # 3) DISEGNO DB PlantUML
+    # 3) DB DESIGN PlantUML
     prompt_db = f"""
-    Sulla base del seguente design YAML:
+    Based on the following design YAML:
 
     {design_yaml}
 
-    Genera un diagramma ER in sintassi PlantUML, SOLO PlantUML:
+    Generate an ER diagram in PlantUML syntax, ONLY PlantUML:
 
     @startuml
     entity Todo {{
@@ -90,12 +100,17 @@ def main():
       IsCompleted : bool
     }}
     @enduml
+
+    CRITICAL: Use English for all entity names, field names, and comments.
     """
 
-    db_puml = call_ai(prompt_db, system_content="Sei un DBA che disegna ER diagram in PlantUML.")
+    db_puml = call_ai(
+        prompt_db,
+        system_content="You are a DBA drawing ER diagrams in PlantUML. Write EVERYTHING in English only."
+    )
     write_utf8("docs/db_design.puml", db_puml)
 
-    print("=== STEP1 completato (generated_app/design.yaml, docs, db_design.puml) ===")
+    print("=== STEP1 completed (generated_app/design.yaml, docs, db_design.puml) ===")
 
 if __name__ == "__main__":
     main()

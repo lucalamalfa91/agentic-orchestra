@@ -10,21 +10,23 @@ def main():
 
     {design}
 
-    Scrivi YAML per .github/workflows/deploy.yml che:
-    - trigger: push su main
-    - job build-backend: dotnet build + docker build/push su ACR crsharedacrcorchn001
+    Write YAML for .github/workflows/deploy.yml that:
+    - trigger: push to main
+    - job build-backend: dotnet build + docker build/push to ACR crsharedacrcorchn001
     - job build-frontend: npm ci && npm run build
-    - job deploy: usa Azure CLI per deploy ACA (backend) e Static Web App (frontend).
+    - job deploy: use Azure CLI to deploy ACA (backend) and Static Web App (frontend).
 
-    Vincoli:
-    - NON usare blocchi di codice markdown.
-    - NON usare marcatori di linguaggio (niente ```yaml, niente ```).
-    - Rispondi SOLO con YAML valido.
+    CRITICAL CONSTRAINTS:
+    - DO NOT use markdown code blocks
+    - DO NOT use language markers (no ```yaml, no ```)
+    - Respond ONLY with valid YAML
+    - Write ALL job names, step names, comments, messages in ENGLISH only
+    - Use English for all workflow names, descriptions, and output messages
     """
 
     workflow_yaml = call_ai(
         prompt,
-        system_content="Sei un DevOps engineer Azure/GitHub Actions."
+        system_content="You are an Azure/GitHub Actions DevOps engineer. Write EVERYTHING in English only."
     )
     app_tsx = strip_markdown_fences(workflow_yaml)
     write_utf8(".github/workflows/deploy.yml", workflow_yaml)

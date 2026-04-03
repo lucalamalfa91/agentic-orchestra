@@ -9,23 +9,25 @@ def main():
 
     {design}
 
-    Scrivi il contenuto COMPLETO del file App.tsx (React 18 + TypeScript) per una todo app:
+    Write the COMPLETE content of App.tsx file (React 18 + TypeScript) for a todo app:
 
-    - mostra lista todo
-    - permette add/toggle/delete
-    - chiama GET/POST/PUT/DELETE /todos via fetch
+    - display todo list
+    - allow add/toggle/delete
+    - call GET/POST/PUT/DELETE /todos via fetch
 
-    Vincoli IMPORTANTI:
-    - NON usare blocchi di codice markdown.
-    - NON usare marcatori di linguaggio (niente ```typescript, niente ```).
-    - Rispondi SOLO con codice TSX valido per App.tsx, pronto da usare in un progetto Vite React.
-    - Se per errore usi ancora i triple backtick, il chiamante rimuoverà il blocco markdown e userà solo il contenuto interno.
-    - usa tutti i comandi necessari per far compilare il codice
+    CRITICAL CONSTRAINTS:
+    - DO NOT use markdown code blocks
+    - DO NOT use language markers (no ```typescript, no ```)
+    - Respond ONLY with valid TSX code for App.tsx, ready to use in a Vite React project
+    - If you accidentally use triple backticks, the caller will remove the markdown block and use only the inner content
+    - Use all necessary imports to make the code compile
+    - Write ALL code, comments, variable names, strings, UI text in ENGLISH only
+    - Use English for all button labels, placeholders, error messages, UI text
     """
 
     raw = call_ai(
         prompt,
-        system_content="Sei un frontend engineer React 18/TypeScript. Produci solo codice TSX, niente markdown."
+        system_content="You are a React 18/TypeScript frontend engineer. Produce only TSX code, no markdown. Write EVERYTHING in English only."
     )
 
     app_tsx = strip_markdown_fences(raw)

@@ -65,72 +65,74 @@ def read_utf8(relative_path):
 
 def write_readme():
     """
-    Genera un documento Markdown che spiega il senso e il design
-    della repository AI Factory (non dell'app generata).
+    Generates a Markdown document explaining the purpose and design
+    of the AI Factory repository (not the generated app).
     """
     print("=== README.md - Repo docs ===")
 
-    # BASE_DIR è già definita in ai_utils come root di app-factory
+    # BASE_DIR is already defined in ai_utils as root of app-factory
     docs_dir = BASE_DIR
     docs_dir.mkdir(parents=True, exist_ok=True)
     target = BASE_DIR / "README.md"
 
     prompt = """
-    Scrivi un documento Markdown che spiega il senso di questa repository.
+    Write a Markdown document that explains the purpose of this repository.
 
-    Contesto:
-    - La repo contiene una AI factory che, dato un requisito testuale
-      (es. "Crea una Todo App con autenticazione"), genera:
-        - design e documentazione
-        - codice backend .NET
-        - codice frontend React
-        - pipeline CI/CD GitHub Actions
-        - backlog items su Azure DevOps
+    Context:
+    - This repo contains an AI factory that, given a text requirement
+      (e.g., "Create a Todo App with authentication"), generates:
+        - design and documentation
+        - .NET backend code
+        - React frontend code
+        - GitHub Actions CI/CD pipeline
+        - Azure DevOps backlog items
 
-    Il documento DEVE spiegare:
-    - Perché esiste questa repository (problema che risolve)
-    - Visione: automatizzare il ciclo di vita software end-to-end
-    - Panoramica dei componenti principali:
-      - cartella AI_agents/ (ruolo degli agent)
-      - script run_all_agents.py (orchestratore)
-      - cartella app-generated/ (output generato)
-    - Come fluiscono i dati da un agent all'altro (alto livello, senza dettagli tecnici)
-    - Come può essere estesa (nuovi agent per security, test, ecc.)
-    - Limiti attuali (serve supervisione umana, non è magia)
+    The document MUST explain:
+    - Why this repository exists (problem it solves)
+    - Vision: automate the software lifecycle end-to-end
+    - Overview of main components:
+      - AI_agents/ folder (agent roles)
+      - run_all_agents.py script (orchestrator)
+      - generated_app/ folder (generated output)
+    - How data flows from one agent to another (high-level, no technical details)
+    - How it can be extended (new agents for security, testing, etc.)
+    - Current limitations (requires human supervision, not magic)
 
-    Struttura suggerita:
+    Suggested structure:
     # AI Factory Repository Overview
 
-    ## Obiettivo
-    (perché esiste questa repo)
+    ## Objective
+    (why this repo exists)
 
-    ## Concetto di AI Factory
-    (descrivi il concetto generale: pipeline di agent che collaborano)
+    ## AI Factory Concept
+    (describe the general concept: pipeline of collaborating agents)
 
-    ## Componenti principali della repository
-    (spiega AI_agents/, run_all_agents.py, app-generated/)
+    ## Main Repository Components
+    (explain AI_agents/, run_all_agents.py, generated_app/)
 
-    ## Flusso di esecuzione
-    (testuale, non serve diagramma, basta descrizione chiara dei passi)
+    ## Execution Flow
+    (textual, no diagram needed, just clear description of steps)
 
-    ## Estensioni possibili
-    (come aggiungere nuovi agent o adattare il flusso)
+    ## Possible Extensions
+    (how to add new agents or adapt the flow)
 
-    ## Quando usarla e quando no
-    (contesto d'uso ideale, cosa NON è)
+    ## When to Use and When Not to Use
+    (ideal use context, what it is NOT)
 
-    Usa Markdown pulito (titoli, paragrafi, liste), nessun blocco di codice
-    con indicazione di linguaggio. Niente esempi di codice sorgente, solo testo.
+    Use clean Markdown (headings, paragraphs, lists), no code blocks
+    with language indicators. No source code examples, only text.
+
+    CRITICAL: Write EVERYTHING in English - all text, headings, descriptions.
     """
 
     raw_doc = call_ai(
         prompt,
-        system_content="Sei un software architect che documenta la visione e la struttura di una repository AI factory."
+        system_content="You are a software architect documenting the vision and structure of an AI factory repository. Write in English only."
     )
 
-    # qui niente strip_markdown_fences, vogliamo proprio un doc Markdown
+    # no strip_markdown_fences here, we want pure Markdown doc
     text = raw_doc.encode("utf-8", errors="ignore")
     with open(target, "wb") as f:
         f.write(text)
 
-    print(f"✅ scritto {target}")
+    print(f"✅ Written {target}")
