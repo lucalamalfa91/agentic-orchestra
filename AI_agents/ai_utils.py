@@ -56,7 +56,7 @@ def write_utf8(relative_path, text):
     data = text.encode("utf-8", errors="ignore")
     with open(target, "wb") as f:
         f.write(data)
-    print(f"✅ scritto {target}")
+    print(f"OK scritto {target}")
 
 def read_utf8(relative_path):
     target = APP_GEN_DIR / relative_path
@@ -135,4 +135,4 @@ def write_readme():
     with open(target, "wb") as f:
         f.write(text)
 
-    print(f"✅ Written {target}")
+    print(f"OK Written {target}")
