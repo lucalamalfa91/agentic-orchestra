@@ -1,17 +1,28 @@
 # app-factory/AI_agents/design_agent.py
-from .ai_utils import call_ai, write_utf8
+from .ai_utils import call_ai, write_utf8, BASE_DIR
+from pathlib import Path
 
 def main():
     print("=== STEP1: design + architecture + DB ===")
 
-    reqs = """
-    Simple Todo App:
-    - FE: React + Tailwind (add/edit/delete/toggle todos)
-    - BE: .NET 8 Minimal API + EF Core SQLite (/todos CRUD)
-    - Deploy: Azure Container Apps (BE) + Static Web App (FE)
-    - ACR: crsharedacrcorchn001
-    - Test: xUnit/Jest
-    """
+    # Read requirements dynamically from pipeline_data/requirements.txt
+    requirements_file = BASE_DIR / "pipeline_data" / "requirements.txt"
+
+    if requirements_file.exists():
+        with open(requirements_file, "r", encoding="utf-8") as f:
+            reqs = f.read()
+        print(f"INFO Requirements loaded from {requirements_file}")
+    else:
+        # Fallback to default requirements
+        reqs = """
+        Simple Todo App:
+        - FE: React + Tailwind (add/edit/delete/toggle todos)
+        - BE: .NET 8 Minimal API + EF Core SQLite (/todos CRUD)
+        - Deploy: Azure Container Apps (BE) + Static Web App (FE)
+        - ACR: crsharedacrcorchn001
+        - Test: xUnit/Jest
+        """
+        print("WARNING No requirements file found, using default requirements")
 
     # 1) DESIGN YAML
     prompt_design = f"""
