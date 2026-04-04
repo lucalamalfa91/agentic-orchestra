@@ -1,7 +1,15 @@
-const API = "http://localhost:8000/api";
+const API = "http://localhost:9000/api";
 
 export async function getGitHubAuthUrl() {
   const res = await fetch(`${API}/auth/github/login`);
+  return res.json();
+}
+
+export async function loginWithGhCLI() {
+  const res = await fetch(`${API}/auth/github/login-with-gh`);
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
   return res.json();
 }
 

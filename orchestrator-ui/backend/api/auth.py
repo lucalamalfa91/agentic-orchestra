@@ -24,6 +24,26 @@ except ModuleNotFoundError:
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+@router.get("/github/check-gh")
+def check_gh_auth():
+    """
+    Check if gh CLI is authenticated.
+
+    Returns:
+        {"authenticated": true/false}
+    """
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["gh", "auth", "status"],
+            capture_output=True,
+            text=True,
+        )
+        return {"authenticated": result.returncode == 0}
+    except Exception:
+        return {"authenticated": False}
+
+
 @router.get("/github/login")
 def github_login():
     """

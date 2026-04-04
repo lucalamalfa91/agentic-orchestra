@@ -4,6 +4,9 @@ FastAPI main application for Orchestrator UI.
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+load_dotenv()
 
 try:
     from orchestrator_ui.backend.database import init_db
@@ -44,18 +47,9 @@ app = FastAPI(
 # Configure CORS - MUST be added before routers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
@@ -108,5 +102,12 @@ async def websocket_endpoint(websocket: WebSocket, generation_id: str):
 
 
 if __name__ == "__main__":
+    import sys
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+
+    port = 8000
+    # Check for port override from environment or command line
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        port = int(sys.argv[1])
+
+    uvicorn.run(app, host="0.0.0.0", port=port)
