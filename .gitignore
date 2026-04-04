@@ -209,6 +209,10 @@ __marimo__/
 # AI Factory - Generated Apps
 generated_app/
 pipeline_data/
+database/
+
+# Dependencies lock files
+**/package-lock.json
 
 # IDE
 .idea/

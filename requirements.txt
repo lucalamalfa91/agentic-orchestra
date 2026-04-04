@@ -1,66 +1,22 @@
-# Core dependencies
-requests>=2.31.0
-python-dotenv>=1.0.0
-apscheduler>=3.10.4
-psycopg2-binary>=2.9.9
-pytest>=7.4.3
-pytest-cov>=4.1.0
-pyyaml>=6.0.1
+Your MVP description goes here.
 
-# Orchestrator UI Backend
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-sqlalchemy>=2.0.25
-websockets>=12.0
-python-multipart>=0.0.6
-aiosqlite>=0.19.0
-cryptography>=41.0.0
-pyjwt>=2.8.0
+Write a clear, detailed description of the application you want to generate.
 
-# ============================================================================
-# HOW TO WRITE REQUIREMENTS FOR OPTIMAL RESULTS
-# ============================================================================
-#
-# Write requirements in pipeline_data/requirements.txt following these rules:
-#
-# 1. CLEAR DESCRIPTION
-#    Start with one sentence describing what the application does.
-#
-# 2. LIST FEATURES
-#    Specify each feature in detail.
-#    Format:
-#    Features:
-#    - [feature 1 with details]
-#    - [feature 2 with details]
-#    - [feature N with details]
-#
-# 3. SPECIFY DEPLOYMENT PLATFORM (CRITICAL!)
-#    Choose where to deploy. FREE options:
-#    - github-pages: static sites only (no backend, no database)
-#    - vercel: React/Next.js + serverless functions
-#    - railway: fullstack with database (recommended, $5 free credit/month)
-#    - render: fullstack with database (free but with cold starts)
-#    - azure-free: Azure Static Web Apps (if you have Azure credits)
-#
-#    Format: "Deploy to: railway"
-#
-# 4. TECHNICAL REQUIREMENTS
-#    Specify preferred technologies:
-#    - Frontend: React, Vue, Angular
-#    - Backend: .NET, Node.js, Python, or "none"
-#    - Database: PostgreSQL, MySQL, MongoDB, or "none"
-#
-#    Format:
-#    Technical:
-#    - Frontend: [framework]
-#    - Backend: [framework]
-#    - Database: [database or none]
-#    - Deploy to: [platform]
-#
-# 5. USER STORIES (optional but recommended)
-#    Describe what users want to do:
-#    Format:
-#    User stories:
-#    - As a [user type], I want to [action] so that [benefit]
-#
-# ============================================================================
+Example:
+A weather app that shows the 7-day forecast for any city. Users can search by city name,
+see current temperature, precipitation chance, wind speed, and hourly breakdown. The app
+should be beautiful, responsive on mobile, and use free weather APIs.
+
+Features:
+- Search by city name
+- Display current temperature and conditions
+- Show 7-day forecast with daily high/low
+- Display precipitation and wind speed
+- Hourly breakdown for today
+- Responsive design for mobile
+
+Technical:
+- Frontend: React
+- Backend: dotnet
+- Database: postgresql
+- Deploy to: railway
