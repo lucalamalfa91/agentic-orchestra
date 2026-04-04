@@ -1,0 +1,29 @@
+const API = "http://localhost:8000/api";
+
+export async function getGitHubAuthUrl() {
+  const res = await fetch(`${API}/auth/github/login`);
+  return res.json();
+}
+
+export async function getAIProviderConfig(userId: number) {
+  const res = await fetch(`${API}/config/ai-provider?user_id=${userId}`);
+  return res.json();
+}
+
+export async function saveAIProvider(userId: number, baseUrl: string, apiKey: string) {
+  const res = await fetch(`${API}/config/ai-provider`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, base_url: baseUrl, api_key: apiKey })
+  });
+  return res.json();
+}
+
+export async function testAIProvider(baseUrl: string, apiKey: string) {
+  const res = await fetch(`${API}/config/ai-provider/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ base_url: baseUrl, api_key: apiKey })
+  });
+  return res.json();
+}

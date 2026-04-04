@@ -1,0 +1,159 @@
+"""
+Configuration API endpoints for AI provider settings.
+"""
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+import requests
+
+try:
+    from orchestrator_ui.backend.models import Configuration
+    from orchestrator_ui.backend.database import get_db
+    from orchestrator_ui.backend.encryption_service import encrypt, decrypt
+except ModuleNotFoundError:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from models import Configuration
+    from database import get_db
+    from encryption_service import encrypt, decrypt
+
+
+router = APIRouter(prefix="/api/config", tags=["config"])
+
+
+# Pydantic models for request validation
+class AIProviderConfig(BaseModel):
+    """AI provider configuration request."""
+    user_id: int
+    base_url: str
+    api_key: str
+
+
+class AIProviderTest(BaseModel):
+    """AI provider test request."""
+    base_url: str
+    api_key: str
+
+
+@router.post("/ai-provider")
+def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db)):
+    """
+    Save AI provider configuration for a user.
+
+    Args:
+        config_data: AI provider configuration data
+        db: Database session
+
+    Returns:
+        Status confirmation
+    """
+    if not config_data.user_id:
+        raise HTTPException(status_code=400, detail="User ID is required")
+    if not config_data.base_url:
+        raise HTTPException(status_code=400, detail="Base URL is required")
+    if not config_data.api_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+
+    try:
+        # Find existing configuration
+        config = db.query(Configuration).filter(Configuration.user_id == config_data.user_id).first()
+
+        if not config:
+            # Create new configuration
+            config = Configuration(
+                user_id=config_data.user_id,
+                ai_base_url=config_data.base_url,
+                ai_api_key_encrypted=encrypt(config_data.api_key),
+            )
+        else:
+            # Update existing configuration
+            config.ai_base_url = config_data.base_url
+            config.ai_api_key_encrypted = encrypt(config_data.api_key)
+
+        db.add(config)
+        db.commit()
+
+        return {"status": "saved", "user_id": config_data.user_id}
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Encryption error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save configuration: {str(e)}")
+
+
+@router.get("/ai-provider")
+def get_ai_provider(user_id: int, db: Session = Depends(get_db)):
+    """
+    Get AI provider configuration for a user.
+
+    Args:
+        user_id: User ID to retrieve configuration for
+        db: Database session
+
+    Returns:
+        AI provider base URL (API key is not returned for security)
+    """
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID is required")
+
+    config = db.query(Configuration).filter(Configuration.user_id == user_id).first()
+
+    if not config:
+        return {"base_url": None, "configured": False}
+
+    return {"base_url": config.ai_base_url, "configured": True}
+
+
+@router.post("/ai-provider/test")
+def test_ai_provider(test_data: AIProviderTest):
+    """
+    Test AI provider connection and credentials.
+
+    Args:
+        test_data: Test configuration data
+
+    Returns:
+        Success status
+    """
+    if not test_data.base_url:
+        raise HTTPException(status_code=400, detail="Base URL is required")
+    if not test_data.api_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+
+    headers = {
+        "Authorization": f"Bearer {test_data.api_key}",
+        "Content-Type": "application/json",
+    }
+
+    # Prepare test request payload
+    payload = {
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": "test"}],
+        "max_tokens": 10,
+    }
+
+    try:
+        # Attempt to call the AI provider
+        response = requests.post(
+            f"{test_data.base_url.rstrip('/')}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=10,
+        )
+
+        # Consider 200-299 as success
+        success = 200 <= response.status_code < 300
+
+        return {
+            "success": success,
+            "status_code": response.status_code,
+            "message": "Connection successful" if success else f"Failed with status {response.status_code}",
+        }
+
+    except requests.Timeout:
+        return {"success": False, "message": "Request timeout - provider is not responding"}
+    except requests.ConnectionError:
+        return {"success": False, "message": "Connection error - cannot reach provider"}
+    except Exception as e:
+        return {"success": False, "message": f"Test failed: {str(e)}"}
