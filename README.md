@@ -1,148 +1,664 @@
-# AI Factory Repository Overview
+# Agentic Orchestra - AI-Powered Application Factory
 
-## Objective
+A revolutionary system that automates the entire software development lifecycle, transforming text requirements into complete, production-ready applications through orchestrated AI agents.
 
-This repository solves a fundamental problem in modern software development: **the gap between requirements and implementation**.
+## Table of Contents
 
-Traditionally, transforming a text requirement into a complete application requires:
-- Analysts who write specifications
-- Architects who design the infrastructure
-- Backend and frontend developers who code
-- DevOps engineers who configure pipelines
-- Project managers who create backlogs
+- [Quick Start](#quick-start)
+- [Concept & Vision](#concept--vision)
+- [Architecture](#architecture)
+- [Repository Structure](#repository-structure)
+- [Setup Guide](#setup-guide)
+- [API Documentation](#api-documentation)
+- [Security](#security)
+- [Limitations & Considerations](#limitations--considerations)
+- [Possible Extensions](#possible-extensions)
 
-This process is slow, expensive, and prone to communication errors. The AI Factory automates this entire lifecycle, enabling a small team to generate complete applications starting from a simple text description.
+---
 
-## AI Factory Concept
+## Quick Start
 
-An AI Factory is an orchestrated system of specialized intelligent agents that collaborate to transform requirements into production-ready software.
+### Prerequisites
 
-Each agent has a specific responsibility:
-- One agent designs the architecture and documentation
-- One agent generates backend code
-- One agent generates frontend code
-- One agent configures automation (CI/CD)
-- One agent populates the project backlog
+- Node.js 18+
+- Python 3.10+
+- Git
 
-The agents don't work in isolation: the output of one feeds the input of the next, creating a value chain where each step adds specifications and details.
+### 5-Minute Setup
 
-The vision is to **automate the software lifecycle end-to-end**, from conception to deployment, maintaining quality and consistency through intelligent supervision.
+```bash
+# 1. Configure environment
+cp .env.example .env
+# Edit .env with your credentials
 
-## Main Repository Components
+# 2. Install dependencies
+pip install -r requirements.txt
+cd orchestrator-ui/frontend && npm install && cd ../..
 
-### `AI_agents/` Folder
+# 3. Initialize database
+cd orchestrator-ui/backend && python init_db.py
 
-Contains specialized agents, each responsible for a phase of the process:
+# 4. Start backend (Terminal 1)
+cd orchestrator-ui/backend
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-- **Design Agent**: analyzes the requirement and produces architecture, diagrams, technical documentation, and design decisions
-- **Backend Agent**: generates backend service code (API, database, business logic)
-- **Frontend Agent**: generates user interface (React components, layout, API integration)
-- **DevOps Agent**: creates CI/CD pipelines, deployment configurations, automation scripts
-- **Backlog Agent**: transforms the design into user stories, tasks, and acceptance criteria on Azure DevOps
+# 5. Start frontend (Terminal 2)
+cd orchestrator-ui/frontend
+npm run dev
 
-Each agent is an independent module that receives structured input and produces output in standardized format.
+# 6. Open browser
+# Frontend: http://localhost:5173
+# Backend Docs: http://localhost:8000/docs
+```
 
-### `run_all_agents.py` Script
+### First Generation
 
-The central orchestrator of the factory. This script:
+1. Click "Connect GitHub" and authorize
+2. Configure AI Provider (Base URL + API Key)
+3. Enter prompt: "Weather app showing 7-day forecast"
+4. Select tech stack (React, dotnet, postgresql, railway)
+5. Watch the generation progress
+6. View your new repository on GitHub
 
-- Receives the initial requirement from the user
-- Invokes agents in logical sequence
-- Passes the output of one agent as input to the next
-- Handles errors and retries
-- Collects all generated artifacts
-- Provides a final execution status report
+---
 
-It acts like a conductor of an orchestra, ensuring each agent plays at the right moment and the final result is coherent.
+## Concept & Vision
 
-### `generated_app/` Folder
+### The Problem
 
-The repository of generated artifacts. Contains:
+Transforming text requirements into production applications requires:
+- Analysts writing specifications
+- Architects designing infrastructure
+- Backend/frontend developers writing code
+- DevOps engineers configuring pipelines
+- Project managers creating backlogs
 
-- **Documentation**: design specifications, architecture, diagrams
-- **Backend**: .NET source code organized in standard project structure
-- **Frontend**: React code with components, pages, services
-- **DevOps**: GitHub Actions configuration files, Dockerfile, deployment scripts
-- **Backlog**: work item exports for Azure DevOps
+This process is slow, expensive, and prone to communication errors.
 
-This folder represents the "finished product" of the factory: a complete, documented application ready to be cloned, compiled, and deployed.
+### The Solution: AI Factory
 
-## Execution Flow
+An orchestrated system of specialized intelligent agents that collaborate to automate the entire lifecycle:
 
-The flow follows sequential but intelligent logic:
+1. **Design Agent** → Architecture, documentation, design decisions
+2. **Backend Agent** → API, database, business logic (.NET)
+3. **Frontend Agent** → UI components, pages, API integration (React)
+4. **DevOps Agent** → CI/CD pipelines, deployment configuration (GitHub Actions)
+5. **Backlog Agent** → User stories, tasks, acceptance criteria (Azure DevOps)
 
-**Phase 1 - Input**: The user provides a text requirement (e.g., "Create a Todo App with JWT authentication and PostgreSQL database").
+Each agent's output feeds into the next, creating a complete value chain from conception to deployment.
 
-**Phase 2 - Design**: The Design Agent analyzes the requirement, identifies necessary components, defines the architecture, chooses technologies, and produces detailed documentation. This output becomes the "contract" for subsequent agents.
+### When to Use
 
-**Phase 3 - Backend**: The Backend Agent reads the design and generates backend service code. It creates controllers, services, data models, authentication configurations, all consistent with design specifications.
+**Ideal for:**
+- Prototypes and MVPs
+- Projects with clear requirements
+- Small teams needing productivity amplification
+- Standard CRUD applications (todo apps, CRMs, inventory management)
+- Rapid iteration on evolving requirements
+- Automatic documentation generation
 
-**Phase 4 - Frontend**: The Frontend Agent reads the design and API contract from the backend, generating React components, pages, HTTP services to communicate with the backend, state management.
+**Not suitable for:**
+- Highly specialized systems (proprietary algorithms, ML, real-time critical systems)
+- Vague or evolving requirements
+- Legacy code integration/refactoring
+- Replacement for expert architects
+- Production without human review
 
-**Phase 5 - DevOps**: The DevOps Agent creates build, test, and deployment pipelines. It configures GitHub Actions to compile code, run tests, and deploy to environments (staging, production).
+---
 
-**Phase 6 - Backlog**: The Backlog Agent transforms the design into structured user stories, technical tasks, and acceptance criteria, creating work items on Azure DevOps for the team.
+## Architecture
 
-**Phase 7 - Output**: All artifacts are collected in `generated_app/`, ready to be used.
+### Frontend Flow
 
-Each phase depends on the previous one: the backend knows how to implement itself because it has the design; the frontend knows which APIs to call because it has the contract from the backend; DevOps knows what to deploy because it has the complete code.
+```
+App (Router + Contexts)
+├── No Auth? → AuthScreen (GitHub login)
+├── Auth OK, No AI Config? → AIProviderSetup
+└── Both OK? → MVPCreationScreen
+   ├── User enters prompt
+   ├── User clicks Generate
+   ├── WebSocket step 2 completes → ConfirmationScreen
+   ├── User confirms
+   ├── Check deploy provider needed
+   │   ├── If yes → DeployAuthScreen (OAuth)
+   │   └── If no → continue
+   └── WebSocket steps 3-6 → Success
+```
+
+### Authentication System
+
+**GitHub OAuth:**
+```
+User clicks login
+  ↓
+/api/auth/github/login
+  ↓
+User authorizes on GitHub
+  ↓
+/api/auth/github/callback?code=X
+  ↓
+Exchange code for JWT token
+  ↓
+Store in localStorage
+```
+
+**JWT Token:**
+- Sent in `Authorization: Bearer` header
+- Validated on protected endpoints
+- 24-hour expiration
+- HS256 algorithm with JWT_SECRET
+
+### State Management
+
+```
+AuthContext
+├── user (id, github_username)
+├── token (JWT)
+└── setToken, setUser
+
+AIProviderContext
+├── config (base_url, api_key_set)
+└── setConfig
+
+GenerationContext
+├── currentScreen
+├── design (from Design Agent)
+├── deployProvider
+└── startGeneration, confirmGeneration
+```
+
+### Database Schema
+
+```
+User
+├── id (PK)
+├── github_id (UNIQUE)
+├── github_username
+├── github_token
+└── created_at
+
+Configuration
+├── id (PK)
+├── user_id (FK)
+├── ai_base_url
+├── ai_api_key_encrypted (Fernet)
+└── is_active
+
+DeployProviderAuth
+├── id (PK)
+├── user_id (FK)
+├── provider_name (vercel, railway)
+├── access_token
+├── refresh_token (optional)
+└── expires_at (optional)
+
+Project
+├── id
+├── name
+├── description
+├── github_repo_url
+└── ...
+
+ProjectRequirement
+├── id
+├── project_id
+├── mvp_description
+├── features
+├── tech_stack (frontend, backend, db, deploy)
+└── ...
+```
+
+### Design Agent Enhancement
+
+The Design Agent analyzes requirements and auto-decides technology stack:
+
+```yaml
+decisions:
+  tech_stack:
+    frontend: "react"
+    backend: "dotnet"
+    database: "postgresql"
+    deploy_platform: "railway"
+  reasoning: "..."
+```
+
+**Priority for API Configuration:**
+1. Database Configuration (if user configured via UI)
+2. Environment variables (ADESSO_* or AI_*)
+3. Default (fallback, may fail)
+
+---
+
+## Repository Structure
+
+### Main Components
+
+```
+agentic-orchestra/
+├── AI_agents/                    # Specialized agents
+│   ├── design_agent.py          # Architecture & documentation
+│   ├── backend_agent.py         # API, database, business logic
+│   ├── frontend_agent.py        # React UI components
+│   ├── devops_agent.py          # CI/CD, deployment
+│   └── backlog_agent.py         # User stories & tasks
+├── orchestrator-ui/
+│   ├── frontend/                # React application
+│   │   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── package.json
+│   └── backend/                 # FastAPI server
+│       ├── main.py              # API routes
+│       ├── init_db.py           # Database initialization
+│       ├── auth.py              # GitHub OAuth
+│       ├── config.py            # Configuration management
+│       └── requirements.txt
+├── generated_app/               # Generated artifacts
+│   ├── docs/                    # Design specifications
+│   ├── backend/                 # Generated .NET code
+│   ├── frontend/                # Generated React code
+│   ├── devops/                  # GitHub Actions workflows
+│   └── backlog/                 # Azure DevOps exports
+├── run_all_agents.py            # Central orchestrator
+└── README.md                    # This file
+```
+
+### Execution Flow
+
+```
+Phase 1: Input
+  └─ User provides text requirement
+
+Phase 2: Design Agent
+  ├─ Analyzes requirement
+  ├─ Identifies necessary components
+  ├─ Defines architecture
+  ├─ Chooses technologies
+  └─ Produces design.yaml contract
+
+Phase 3: Backend Agent
+  ├─ Reads design contract
+  ├─ Generates .NET code
+  ├─ Creates data models
+  ├─ Implements authentication
+  └─ API routes consistent with design
+
+Phase 4: Frontend Agent
+  ├─ Reads design and API contract
+  ├─ Generates React components
+  ├─ Creates HTTP services
+  ├─ Implements state management
+  └─ Matches design specifications
+
+Phase 5: DevOps Agent
+  ├─ Creates build pipelines
+  ├─ Configures GitHub Actions
+  ├─ Creates Dockerfile
+  └─ Generates deployment scripts
+
+Phase 6: Backlog Agent
+  ├─ Transforms design into user stories
+  ├─ Creates technical tasks
+  ├─ Defines acceptance criteria
+  └─ Creates Azure DevOps work items
+
+Phase 7: Output
+  └─ All artifacts collected in generated_app/
+```
+
+---
+
+## Setup Guide
+
+### Environment Configuration
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+**Required Variables:**
+
+```bash
+# GitHub OAuth
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+
+# AI Provider (choose one)
+# Option 1: OpenAI
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=sk-...
+
+# Option 2: Adesso AI Hub
+ADESSO_BASE_URL=https://adesso-ai-hub.3asabc.de/v1
+ADESSO_AI_HUB_KEY=your-key
+
+# Security
+JWT_SECRET=your-secret-key-min-32-chars
+ENCRYPTION_KEY=your-encryption-key
+
+# Optional: Deploy Providers
+VERCEL_CLIENT_ID=...
+VERCEL_CLIENT_SECRET=...
+RAILWAY_CLIENT_ID=...
+RAILWAY_CLIENT_SECRET=...
+```
+
+### GitHub OAuth Setup
+
+1. Go to https://github.com/settings/developers
+2. Create New OAuth App
+3. Set **Authorization callback URL** to `http://localhost:5173/auth/callback`
+4. Copy **Client ID** and **Client Secret** to `.env`
+
+### AI Provider Configuration
+
+**Option 1: OpenAI**
+- Base URL: `https://api.openai.com/v1`
+- Get API Key from https://platform.openai.com/api-keys
+
+**Option 2: Adesso AI Hub**
+- Contact your Adesso administrator for Base URL and API Key
+- Hub dashboard: https://adesso-ai-hub.3asabc.de
+
+**Option 3: Compatible Provider**
+- Any OpenAI-compatible API endpoint works
+- Supports local Ollama, vLLM, or other compatible services
+
+### Backend Setup
+
+```bash
+cd orchestrator-ui/backend
+pip install -r requirements.txt
+python init_db.py
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Verify:** Open http://localhost:8000/docs → Swagger UI
+
+### Frontend Setup
+
+```bash
+cd orchestrator-ui/frontend
+npm install
+npm run dev
+```
+
+**Open:** http://localhost:5173
+
+### Troubleshooting
+
+**Port already in use:**
+```bash
+# Find and kill process on port 8000
+lsof -ti:8000 | xargs kill -9
+# Or change port in main.py
+```
+
+**GitHub OAuth error:**
+- Verify Client ID/Secret in .env
+- Check callback URL matches: `http://localhost:5173/auth/callback`
+
+**AI Provider error:**
+- Test connection in UI
+- Verify API Key is valid and has quota
+
+**Database locked:**
+```bash
+# Kill all Python processes
+pkill -f python
+# Reinitialize
+cd orchestrator-ui/backend
+rm -f ../../database/orchestrator.db
+python init_db.py
+```
+
+**Node dependencies error:**
+```bash
+cd orchestrator-ui/frontend
+rm -rf node_modules package-lock.json
+npm install
+```
+
+---
+
+## API Documentation
+
+### Authentication Endpoints
+
+**GET** `/api/auth/github/login`
+- Returns GitHub OAuth authorization URL
+- Response: `{"url": "https://github.com/login/oauth/authorize?..."}`
+
+**GET** `/api/auth/github/callback?code=X`
+- Exchanges authorization code for JWT token
+- Query params: `code` (from GitHub)
+- Response: `{"token": "jwt_token", "user_id": 1}`
+
+**GET** `/api/auth/github/status`
+- Check GitHub connection status
+- Response: `{"connected": true, "username": "octocat"}`
+
+### AI Provider Configuration
+
+**POST** `/api/config/ai-provider`
+- Save AI provider configuration
+- Headers: `Authorization: Bearer jwt_token`
+- Body: `{"base_url": "https://...", "api_key": "sk-..."}`
+- Response: `{"status": "saved"}`
+
+**GET** `/api/config/ai-provider`
+- Get AI provider config (API key not exposed)
+- Response: `{"base_url": "https://..."}`
+
+**POST** `/api/config/ai-provider/test`
+- Test connection to AI provider
+- Body: `{"base_url": "https://...", "api_key": "sk-..."}`
+- Response: `{"success": true}`
+
+### Generation Endpoints
+
+**POST** `/api/generation/start`
+- Start application generation
+- Headers: `Authorization: Bearer jwt_token`
+- Body:
+  ```json
+  {
+    "mvp_description": "Weather app with 7-day forecast",
+    "tech_stack": {
+      "frontend": "react",
+      "backend": "dotnet",
+      "database": "postgresql",
+      "deploy_platform": "railway"
+    },
+    "auto_decide": true
+  }
+  ```
+- Response: `{"id": "gen_123", "websocket_url": "ws://..."}`
+
+**WS** `/ws/generation/{generation_id}`
+- WebSocket connection for real-time progress updates
+- Messages: `{"step": 1, "status": "completed", "message": "..."}`
+
+### Deploy Provider OAuth
+
+**GET** `/api/auth/deploy/{provider}/login`
+- Start OAuth flow for deploy provider (vercel, railway)
+- Response: `{"url": "https://..."}`
+
+**GET** `/api/auth/deploy/{provider}/callback?code=X`
+- Exchange code for deploy provider access token
+- Response: `{"status": "ok"}`
+
+### Error Responses
+
+All errors return:
+```json
+{
+  "detail": "Error message",
+  "status_code": 400
+}
+```
+
+Common status codes:
+- 400: Bad request
+- 401: Unauthorized (missing/invalid token)
+- 404: Not found
+- 500: Server error
+
+---
+
+## Security
+
+### Data Protection
+
+- **GitHub Token:** Stored in database (GitHub manages revocation)
+- **API Key:** Encrypted with Fernet algorithm (ENCRYPTION_KEY from .env)
+- **JWT Token:** HS256 algorithm with 24-hour expiration (JWT_SECRET from .env)
+
+### API Security
+
+- **CORS:** Only configured frontend origins allowed
+- **Authentication:** All sensitive endpoints require JWT in Authorization header
+- **Rate Limiting:** Recommended to enable before production
+
+### Pre-Deployment Checklist
+
+- [ ] Change JWT_SECRET to strong random value
+- [ ] Change ENCRYPTION_KEY to strong random value
+- [ ] Enable CORS for production domain only
+- [ ] Use HTTPS in production
+- [ ] Run security audit on generated code
+- [ ] Configure proper logging and monitoring
+- [ ] Set up database backups
+- [ ] Enable rate limiting on API endpoints
+
+---
+
+## Limitations & Considerations
+
+### Important Disclaimers
+
+**Human supervision required:** Generated code must be reviewed by experienced developers. Agents can make logical errors, generate inefficient code, or miss important details.
+
+**Quality depends on input:** Vague or incomplete requirements produce vague or incomplete code. "Garbage in, garbage out" remains valid.
+
+**Limited context:** Agents have no memory of past decisions or deep business context. Each generation is independent.
+
+**Predefined technology stacks:** Factory generates code for specific stacks (.NET, React, GitHub Actions). Not easily adaptable to different stacks without modification.
+
+**Incomplete testing:** Generated code has basic tests but doesn't cover all edge cases or complex scenarios.
+
+**Security consideration:** Generated code follows common best practices but isn't immune to vulnerabilities. Human security audits are essential.
+
+**Performance:** Generated code is functionally correct but not optimized. Profiling and manual optimization may be necessary.
+
+### Recommendation
+
+The AI Factory is an acceleration tool, not a replacement. Maximum value emerges when used as a starting point for a team of developers who refine, test, and evolve the generated code.
+
+---
 
 ## Possible Extensions
 
-The architecture is designed to be extensible. New agents can be added to the flow:
+The architecture supports adding new agents to the flow:
 
-**Security Agent**: analyzes the design and generated code, identifies vulnerabilities, suggests mitigations, generates security tests and hardening configurations.
+### Security Agent
+- Analyzes design and generated code
+- Identifies vulnerabilities
+- Suggests security mitigations
+- Generates security tests
 
-**Test Agent**: generates automated test suites (unit tests, integration tests, e2e tests) based on design specifications and generated code.
+### Test Agent
+- Generates automated test suites
+- Unit, integration, and e2e tests
+- Coverage reports
 
-**Documentation Agent**: produces end-user documentation, installation guides, API documentation, tutorials.
+### Documentation Agent
+- Produces end-user documentation
+- Installation guides
+- API documentation
+- Tutorials
 
-**Performance Agent**: analyzes the design and code, identifies potential bottlenecks, suggests optimizations, generates load tests.
+### Performance Agent
+- Analyzes design and code
+- Identifies bottlenecks
+- Suggests optimizations
+- Generates load tests
 
-**Compliance Agent**: verifies that the design and code comply with regulatory standards (GDPR, HIPAA, etc.).
+### Compliance Agent
+- Verifies GDPR compliance
+- Checks HIPAA requirements
+- Regulatory standard validation
 
-To add a new agent:
+### Adding a New Agent
 
-1. Create a module in `AI_agents/` that implements the standard interface
-2. Define expected input and output
-3. Integrate into the `run_all_agents.py` flow at the appropriate logical point
-4. Test that the output is consistent with adjacent agents
+1. Create a module in `AI_agents/` implementing standard interface
+2. Define expected input and output schemas
+3. Integrate into `run_all_agents.py` at appropriate logical point
+4. Test consistency with adjacent agents
+5. Document integration steps
 
-## When to Use and When Not to Use
+---
 
-### Ideal for:
+## Migration Guide (v2)
 
-- **Prototypes and MVPs**: quickly generate an initial version of an application
-- **Projects with clear requirements**: when the requirement is well-defined and unambiguous
-- **Small teams**: amplify the productivity of a few developers
-- **Standard CRUD applications**: todo apps, inventory management, simple CRMs
-- **Rapid iteration**: generate successive versions as requirements evolve
-- **Documentation**: automatically produce specifications and architecture
+### Backward Compatibility
 
-### Not suitable for:
+✓ Fully backward compatible with existing `.env` configuration
+✓ Existing projects continue to work
+✓ No breaking changes to API
 
-- **Highly specialized systems**: proprietary algorithms, complex machine learning, critical real-time systems
-- **Vague or evolving requirements**: if the requirement is not clear, even the factory cannot generate useful code
-- **Legacy code**: cannot integrate or refactor existing code
-- **Replacement for expert architects**: generates correct but not innovative code; does not replace human critical thinking
-- **Production without review**: generated code must be reviewed, tested, and approved by humans
+### For Existing Users
 
-## Current Limitations and Important Considerations
+**Option 1: Keep Using .env (No Changes)**
+```bash
+# Your existing configuration still works
+ADESSO_BASE_URL=...
+ADESSO_AI_HUB_KEY=...
+# Config loader automatically falls back to .env
+```
 
-This is an intelligent factory, not magic. It has significant limitations:
+**Option 2: Migrate to Database Config (Recommended)**
+1. Start backend with existing .env
+2. Open http://localhost:5173
+3. Click "Connect GitHub"
+4. Go to AI Provider Setup
+5. Enter your Base URL and API Key
+6. Click "Test Connection" → "Save"
+7. Config now stored in encrypted database
 
-**Human supervision required**: Generated code must be reviewed by experienced developers. Agents can make logical errors, generate inefficient code, or miss important details.
+### Upgrade Steps
 
-**Quality depends on input**: If the requirement is vague or incomplete, the output will be vague or incomplete. "Garbage in, garbage out" remains valid.
+```bash
+# 1. Get latest code
+git pull origin main
 
-**Limited context**: Agents have no memory of past decisions or deep business context. Each generation is independent.
+# 2. Backend
+cd orchestrator-ui/backend
+pip install -r requirements.txt
+# Database tables auto-created
+python -m uvicorn main:app --reload
 
-**Predefined technologies**: The factory generates code for specific technology stacks (.NET, React, GitHub Actions). It is not easily adaptable to different stacks without significant modifications.
+# 3. Frontend
+cd orchestrator-ui/frontend
+npm install
+npm run dev
+```
 
-**Incomplete testing**: Generated code has basic tests, but does not cover all edge cases or complex scenarios.
+---
 
-**Security**: Generated code follows common best practices, but is not immune to vulnerabilities. Human security audits are essential before production deployment.
+## Support & Help
 
-**Performance**: Generated code is functionally correct but not optimized. Profiling and manual optimization may be necessary.
+- **Backend API Docs:** http://localhost:8000/docs (Swagger UI)
+- **Backend Logs:** Check Terminal 1 running uvicorn
+- **Frontend Logs:** Check browser DevTools console
+- **Database:** `sqlite3 database/orchestrator.db` for direct inspection
+- **Issues:** Report at https://github.com/anthropics/claude-code/issues
+- **Help with Claude Code:** Use `/help` command
 
-The AI Factory is an acceleration tool, not a replacement. Its maximum value emerges when used as a starting point for a team of developers who refine, test, and evolve the generated code.
+---
+
+**Made with ❤️ using Claude AI**
