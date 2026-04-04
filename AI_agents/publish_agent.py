@@ -18,8 +18,25 @@ def run_command(cmd, cwd=None):
         print(f"Error: {result.stderr}")
     return result
 
+def check_gh_auth():
+    """Check if gh CLI is authenticated, if not prompt login"""
+    check_auth = run_command("gh auth status")
+
+    if check_auth.returncode != 0:
+        print("GitHub CLI not authenticated. Please login...")
+        login_result = run_command("gh auth login")
+        if login_result.returncode != 0:
+            print("Failed to authenticate with GitHub CLI")
+            return False
+    return True
+
 def main():
     print("=== STEP5: Publish to GitHub and Deploy ===")
+
+    # Check GitHub authentication
+    if not check_gh_auth():
+        print("Cannot proceed without GitHub authentication")
+        return
 
     # Read design to get app name
     design = read_utf8("design.yaml")
