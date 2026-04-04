@@ -5,6 +5,7 @@ A revolutionary system that automates the entire software development lifecycle,
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Using requirements.txt](#using-requirementstxt)
 - [Concept & Vision](#concept--vision)
 - [Architecture](#architecture)
 - [Repository Structure](#repository-structure)
@@ -60,6 +61,86 @@ npm run dev
 4. Select tech stack (React, dotnet, postgresql, railway)
 5. Watch the generation progress
 6. View your new repository on GitHub
+
+---
+
+## Using requirements.txt
+
+The `requirements.txt` file is your **input template** for generating applications. It describes what you want to build.
+
+### Format
+
+```
+Your MVP description goes here.
+
+Write a clear, detailed description of the application you want to generate.
+
+Example:
+A weather app that shows the 7-day forecast for any city. Users can search by city name,
+see current temperature, precipitation chance, wind speed, and hourly breakdown.
+
+Features:
+- Search by city name
+- Display current temperature and conditions
+- Show 7-day forecast with daily high/low
+- Display precipitation and wind speed
+- Hourly breakdown for today
+- Responsive design for mobile
+
+Technical:
+- Frontend: React
+- Backend: dotnet
+- Database: postgresql
+- Deploy to: railway
+```
+
+### How to Use
+
+**Option 1: Via UI (Recommended)**
+1. Start the application with the steps above
+2. Fill in the form with your app description
+3. Click "Generate App"
+
+**Option 2: Manual CLI Mode (Future)**
+1. Edit `requirements.txt` with your app description
+2. Run `python run_all_agents.py`
+3. Generated app appears in `generated_app/` folder
+
+### Key Sections
+
+- **MVP Description:** Clear overview of what the app does
+- **Features:** Specific, measurable features (one per line)
+- **Technical Stack:**
+  - **Frontend:** react, vue, angular, or none
+  - **Backend:** dotnet, node, python, or none
+  - **Database:** postgresql, mysql, mongodb, or none
+  - **Deploy to:** railway, vercel, github-pages, render, azure-free
+
+### Example Applications
+
+**Weather App (Free)**
+```
+Frontend: React
+Backend: none
+Database: none
+Deploy to: github-pages
+```
+
+**Full-Stack Todo App**
+```
+Frontend: React
+Backend: dotnet
+Database: postgresql
+Deploy to: railway
+```
+
+**Serverless API**
+```
+Frontend: React
+Backend: node
+Database: none
+Deploy to: vercel
+```
 
 ---
 
