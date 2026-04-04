@@ -6,9 +6,8 @@ import { useAuth } from '../hooks/useAuth';
 
 export default function AuthScreen() {
   const navigate = useNavigate();
-  const { token, setToken } = useAuth();
+  const { token } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [useGhCli, setUseGhCli] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -20,35 +19,13 @@ export default function AuthScreen() {
     setError('');
     try {
       const data = await getGitHubAuthUrl();
-
-      if (data.use_gh_cli) {
-        // GITHUB_CLIENT_ID not configured, use gh CLI instead
-        setUseGhCli(true);
-      } else if (data.url) {
+      if (data.url) {
         window.location.href = data.url;
+      } else {
+        setError('GitHub OAuth not configured. Please set GITHUB_CLIENT_ID in .env');
       }
     } catch (err) {
       setError('Failed to initiate login');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGhCliLogin = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch('http://localhost:8000/api/auth/github/login-with-gh');
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'gh CLI authentication failed');
-      }
-      const { token: jwt_token } = await response.json();
-      setToken(jwt_token);
-      navigate('/');
-    } catch (err: any) {
-      setError(err.message || 'Failed to authenticate with gh CLI');
       console.error(err);
     } finally {
       setLoading(false);
@@ -69,43 +46,17 @@ export default function AuthScreen() {
           </div>
         )}
 
-        {useGhCli ? (
-          <>
-            <p className="text-sm text-gray-600 mb-4">
-              Using your existing gh CLI authentication ({useGhCli ? '✓' : ''})
-            </p>
-            <Button
-              onClick={handleGhCliLogin}
-              disabled={loading}
-              className="w-full bg-green-600 text-white hover:bg-green-700"
-            >
-              {loading ? 'Authenticating...' : '✓ Login with gh CLI'}
-            </Button>
-            <button
-              onClick={() => {
-                setUseGhCli(false);
-                setError('');
-              }}
-              className="text-xs text-blue-600 hover:underline mt-2 w-full"
-            >
-              Use OAuth instead
-            </button>
-          </>
-        ) : (
-          <>
-            <Button
-              onClick={handleGitHubLogin}
-              disabled={loading}
-              className="w-full bg-black text-white hover:bg-gray-800"
-            >
-              {loading ? '...' : '✓ Connect GitHub'}
-            </Button>
+        <Button
+          onClick={handleGitHubLogin}
+          disabled={loading}
+          className="w-full bg-black text-white hover:bg-gray-800"
+        >
+          {loading ? '...' : '✓ Connect GitHub'}
+        </Button>
 
-            <p className="text-xs text-gray-400 text-center mt-4">
-              We'll authenticate with GitHub to publish your apps
-            </p>
-          </>
-        )}
+        <p className="text-xs text-gray-400 text-center mt-4">
+          We'll authenticate with GitHub to publish your apps
+        </p>
       </div>
     </div>
   );

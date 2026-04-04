@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AIProviderProvider } from './context/AIProviderContext';
@@ -43,17 +44,46 @@ function AppContent() {
   );
 }
 
+function AutoAuthWrapper() {
+  const { token, setToken } = useAuth();
+  const [attemptedAutoAuth, setAttemptedAutoAuth] = useState(false);
+
+  useEffect(() => {
+    if (!token && !attemptedAutoAuth) {
+      attemptAutoAuth();
+    }
+  }, [token, attemptedAutoAuth]);
+
+  const attemptAutoAuth = async () => {
+    setAttemptedAutoAuth(true);
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/github/login-with-gh');
+      if (response.ok) {
+        const { token: jwt_token } = await response.json();
+        setToken(jwt_token);
+      }
+    } catch (err) {
+      // gh CLI not available or not authenticated, will show AuthScreen
+      console.debug('Auto-auth failed, will show login screen');
+    }
+  };
+
+  return (
+    <Routes>
+      <Route path="/auth" element={<AuthScreen />} />
+      <Route path="/auth/callback" element={<OAuthCallback />} />
+      <Route path="/provider-setup" element={<AIProviderSetup />} />
+      <Route path="/*" element={<AppContent />} />
+    </Routes>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <AIProviderProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/auth" element={<AuthScreen />} />
-            <Route path="/auth/callback" element={<OAuthCallback />} />
-            <Route path="/provider-setup" element={<AIProviderSetup />} />
-            <Route path="/*" element={<AppContent />} />
-          </Routes>
+          <AutoAuthWrapper />
         </BrowserRouter>
       </AIProviderProvider>
     </AuthProvider>
