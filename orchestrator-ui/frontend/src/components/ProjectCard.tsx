@@ -21,19 +21,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onEdit }) => {
     }).format(date);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
-      case 'failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-    }
-  };
-
   const getStatusColorLuxury = (status: string) => {
     switch (status) {
       case 'completed':
@@ -67,16 +54,32 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onEdit }) => {
 
   return (
     <div
-      className="glass-card p-6 space-y-4 group"
+      className="glass-card p-6 space-y-4 group project-card-luxury"
       style={{
         background: 'rgba(255, 255, 255, 0.05)',
         backdropFilter: 'blur(20px)',
         border: '1px solid rgba(255, 255, 255, 0.1)',
-        transition: 'var(--transition-default)'
+        transition: 'var(--transition-default)',
+        position: 'relative',
+        overflow: 'hidden'
       }}
     >
+      {/* Shimmer effect overlay on hover */}
+      <div
+        className="shimmer-overlay"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: '-100%',
+          width: '100%',
+          height: '100%',
+          background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent)',
+          pointerEvents: 'none',
+          zIndex: 1
+        }}
+      />
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3" style={{ position: 'relative', zIndex: 2 }}>
         <div className="flex-1 min-w-0">
           <h3
             className="text-lg font-semibold truncate"
@@ -110,14 +113,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onEdit }) => {
       {project.description && (
         <p
           className="text-sm line-clamp-2"
-          style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}
+          style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6, position: 'relative', zIndex: 2 }}
         >
           {project.description}
         </p>
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3 pt-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+      <div className="flex items-center gap-3 pt-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', position: 'relative', zIndex: 2 }}>
         {project.github_repo_url && (
           <a
             href={project.github_repo_url}
