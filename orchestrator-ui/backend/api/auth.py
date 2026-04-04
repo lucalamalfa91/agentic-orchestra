@@ -23,6 +23,57 @@ except ModuleNotFoundError:
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+SECRET_KEY = os.getenv("JWT_SECRET", "secret")
+
+
+def create_jwt_token(user_id: int):
+    """
+    Create a JWT token for a user.
+
+    Args:
+        user_id: User ID to encode in the token
+
+    Returns:
+        Encoded JWT token string
+    """
+    payload = {
+        "user_id": user_id,
+        "exp": datetime.utcnow() + timedelta(days=1)
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+
+
+def verify_jwt_token(token: str):
+    """
+    Verify and decode a JWT token.
+
+    Args:
+        token: JWT token string to verify
+
+    Returns:
+        User ID if token is valid, None otherwise
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return payload.get("user_id")
+    except:
+        return None
+
+
+def get_current_user_id(token: str = None):
+    """
+    Helper function to get the current user ID from a token.
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        User ID if token is valid, None otherwise
+    """
+    if not token:
+        return None
+    return verify_jwt_token(token)
+
 
 @router.get("/github/login")
 def github_login():
@@ -78,19 +129,10 @@ def github_callback(code: str, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
-        # Generate JWT token
-        jwt_secret = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
-        jwt_token = jwt.encode(
-            {
-                "user_id": user.id,
-                "username": user.github_username,
-                "exp": datetime.utcnow() + timedelta(days=7),
-            },
-            jwt_secret,
-            algorithm="HS256",
-        )
+        # Generate JWT token using the new helper function
+        jwt_token = create_jwt_token(user.id)
 
-        return {"token": jwt_token, "user_id": user.id, "username": user.github_username}
+        return {"token": jwt_token, "user_id": user.id}
 
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"GitHub API error: {str(e)}")

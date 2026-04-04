@@ -1,155 +1,121 @@
 /**
- * Hook for managing app generation lifecycle.
+ * Hook for managing app generation lifecycle with multi-screen flow.
  */
 import { useState, useCallback } from 'react';
-import { generationApi, projectsApi } from '../api/client';
-import type { GenerationRequest, ProgressMessage, FormData } from '../types';
-import { useWebSocket } from './useWebSocket';
 
-type GenerationState = 'idle' | 'generating' | 'completed' | 'error';
+type Screen = 'creation' | 'progress' | 'confirmation' | 'deploy' | 'success';
 
-export const useGeneration = () => {
-  const [state, setState] = useState<GenerationState>('idle');
-  const [_generationId, setGenerationId] = useState<string | null>(null);
-  const [websocketUrl, setWebsocketUrl] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [percentage, setPercentage] = useState(0);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [_projectId, setProjectId] = useState<number | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+interface GenerationState {
+  currentScreen: Screen;
+  generationId: string | null;
+  design: any | null;
+  deployProvider: string | null;
+  currentStep: number;
+  percentage: number;
+  message: string;
+  error: string | null;
+}
 
-  const handleProgressMessage = useCallback((msg: ProgressMessage) => {
-    setCurrentStep(msg.step_number);
-    setPercentage(msg.percentage);
-    setMessage(msg.message);
-
-    if (msg.percentage === 100) {
-      setState('completed');
-      // Trigger project history refresh
-      setRefreshTrigger((prev) => prev + 1);
-    }
-  }, []);
-
-  const handleWebSocketError = useCallback((error: Event) => {
-    console.error('WebSocket error:', error);
-    // Don't fail the whole generation on WebSocket error
-    // The generation continues in the background
-  }, []);
-
-  const handleWebSocketClose = useCallback(() => {
-    console.log('WebSocket closed');
-  }, []);
-
-  const { isConnected, disconnect } = useWebSocket(websocketUrl, {
-    onMessage: handleProgressMessage,
-    onError: handleWebSocketError,
-    onClose: handleWebSocketClose,
+export function useGeneration() {
+  const [state, setState] = useState<GenerationState>({
+    currentScreen: 'creation',
+    generationId: null,
+    design: null,
+    deployProvider: null,
+    currentStep: 0,
+    percentage: 0,
+    message: '',
+    error: null,
   });
 
-  const startGeneration = useCallback(
-    async (formData: FormData) => {
-      try {
-        setState('generating');
-        setError(null);
-        setCurrentStep(0);
-        setPercentage(0);
-        setMessage('Starting generation...');
-
-        // Parse features and user stories from newline-separated text
-        const features = formData.features
-          .split('\n')
-          .map((f) => f.trim())
-          .filter((f) => f.length > 0);
-
-        const userStories = formData.user_stories
-          ? formData.user_stories
-              .split('\n')
-              .map((s) => s.trim())
-              .filter((s) => s.length > 0)
-          : undefined;
-
-        // Create generation request
-        const request: GenerationRequest = {
-          mvp_description: formData.mvp_description,
-          features,
-          user_stories: userStories,
-          tech_stack: {
-            frontend: formData.frontend,
-            backend: formData.backend,
-            database: formData.database,
-            deploy_platform: formData.deploy_platform,
-          },
-        };
-
-        // Start generation
-        const response = await generationApi.startGeneration(request);
-        setGenerationId(response.generation_id);
-        setWebsocketUrl(response.websocket_url);
-
-        console.log('✅ Generation started:', response);
-      } catch (err: any) {
-        console.error('❌ Failed to start generation:', err);
-        setState('error');
-        setError(err.response?.data?.detail || err.message || 'Failed to start generation');
-      }
-    },
-    []
-  );
-
-  const reset = useCallback(() => {
-    disconnect();
-    setState('idle');
-    setGenerationId(null);
-    setWebsocketUrl(null);
-    setCurrentStep(0);
-    setPercentage(0);
-    setMessage('');
-    setError(null);
-    setProjectId(null);
-  }, [disconnect]);
-
-  const loadProjectForEdit = useCallback(async (projectId: number): Promise<FormData | null> => {
+  const startGeneration = useCallback(async (data: any) => {
     try {
-      const requirements = await projectsApi.getProjectRequirements(projectId);
+      // Step 1: Send generation request
+      const res = await fetch('http://localhost:8000/api/generation/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('jwt_token')}`,
+        },
+        body: JSON.stringify(data),
+      });
 
-      // Parse features and user stories from JSON strings
-      const features = JSON.parse(requirements.features || '[]').join('\n');
-      const userStories = requirements.user_stories
-        ? JSON.parse(requirements.user_stories).join('\n')
-        : '';
+      if (!res.ok) {
+        throw new Error('Failed to start generation');
+      }
 
-      return {
-        mvp_description: requirements.mvp_description,
-        features,
-        user_stories: userStories,
-        frontend: requirements.frontend_framework || 'react',
-        backend: requirements.backend_framework || 'dotnet',
-        database: requirements.database_type || 'none',
-        deploy_platform: requirements.deploy_platform || 'vercel',
+      const json = await res.json();
+
+      setState(prev => ({
+        ...prev,
+        currentScreen: 'progress',
+        generationId: json.id,
+        error: null,
+      }));
+
+      // Step 2: Connect WebSocket for progress updates
+      const ws = new WebSocket(`ws://localhost:8000/ws/generation/${json.id}`);
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+
+        // Update progress
+        setState(prev => ({
+          ...prev,
+          currentStep: msg.step || prev.currentStep,
+          percentage: msg.percentage || prev.percentage,
+          message: msg.message || prev.message,
+        }));
+
+        // Step 2 completed - show design confirmation
+        if (msg.step === 2 && msg.status === 'completed') {
+          setState(prev => ({
+            ...prev,
+            currentScreen: 'confirmation',
+            design: msg.design,
+          }));
+        }
+
+        // Step 6 - generation complete
+        if (msg.step === 6) {
+          setState(prev => ({
+            ...prev,
+            currentScreen: 'success',
+          }));
+          ws.close();
+        }
       };
-    } catch (err) {
-      console.error('Failed to load project requirements:', err);
-      return null;
+
+      ws.onerror = () => {
+        setState(prev => ({
+          ...prev,
+          error: 'WebSocket connection error',
+        }));
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket closed');
+      };
+
+    } catch (err: any) {
+      setState(prev => ({
+        ...prev,
+        error: err.message || 'Failed to start generation',
+        currentScreen: 'creation',
+      }));
     }
+  }, []);
+
+  const confirmGeneration = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      currentScreen: 'progress',
+    }));
   }, []);
 
   return {
-    // State
-    state,
-    isGenerating: state === 'generating',
-    isCompleted: state === 'completed',
-    isError: state === 'error',
-    error,
-    currentStep,
-    percentage,
-    message,
-    isConnected,
-    refreshTrigger,
-
-    // Actions
+    ...state,
     startGeneration,
-    reset,
-    loadProjectForEdit,
+    confirmGeneration,
   };
-};
+}

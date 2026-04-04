@@ -22,6 +22,18 @@ const api = axios.create({
   timeout: 10000,
 });
 
+// Add request interceptor for JWT token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('jwt_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Add response interceptor for better error handling
 api.interceptors.response.use(
   (response) => response,
@@ -79,6 +91,48 @@ export const generationApi = {
    */
   async startGeneration(request: GenerationRequest): Promise<GenerationStartResponse> {
     const response = await api.post<GenerationStartResponse>('/api/generation/start', request);
+    return response.data;
+  },
+};
+
+export const authApi = {
+  /**
+   * Get GitHub OAuth login URL.
+   */
+  async getGitHubAuthUrl(): Promise<{ auth_url: string }> {
+    const response = await api.get<{ auth_url: string }>('/api/auth/github/login');
+    return response.data;
+  },
+};
+
+export const configApi = {
+  /**
+   * Save AI provider configuration.
+   */
+  async saveAIProvider(baseUrl: string, apiKey: string): Promise<{ message: string; is_configured: boolean }> {
+    const response = await api.post('/api/config/ai-provider', {
+      base_url: baseUrl,
+      api_key: apiKey,
+    });
+    return response.data;
+  },
+
+  /**
+   * Test AI provider connection.
+   */
+  async testAIProvider(baseUrl: string, apiKey: string): Promise<{ success: boolean; message: string }> {
+    const response = await api.post('/api/config/ai-provider/test', {
+      base_url: baseUrl,
+      api_key: apiKey,
+    });
+    return response.data;
+  },
+
+  /**
+   * Get current AI provider configuration.
+   */
+  async getAIProviderConfig(): Promise<{ is_configured: boolean; base_url?: string }> {
+    const response = await api.get('/api/config/ai-provider');
     return response.data;
   },
 };
