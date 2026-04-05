@@ -65,11 +65,13 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
                 user_id=config_data.user_id,
                 ai_base_url=config_data.base_url,
                 ai_api_key_encrypted=encrypt(config_data.api_key),
+                is_active=True,
             )
         else:
             # Update existing configuration
             config.ai_base_url = config_data.base_url
             config.ai_api_key_encrypted = encrypt(config_data.api_key)
+            config.is_active = True
 
         db.add(config)
         db.commit()

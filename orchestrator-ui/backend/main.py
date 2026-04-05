@@ -5,8 +5,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# Load .env from project root
+env_path = Path(__file__).parent.parent.parent / '.env'
+load_dotenv(env_path)
 
 try:
     from orchestrator_ui.backend.database import init_db
@@ -47,9 +50,32 @@ app = FastAPI(
 # Configure CORS - MUST be added before routers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",
+        "http://localhost:5177",
+        "http://localhost:5178",
+        "http://localhost:5179",
+        "http://localhost:5180",
+        "http://localhost:5181",
+        "http://localhost:5182",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175",
+        "http://127.0.0.1:5176",
+        "http://127.0.0.1:5177",
+        "http://127.0.0.1:5178",
+        "http://127.0.0.1:5179",
+        "http://127.0.0.1:5180",
+        "http://127.0.0.1:5181",
+        "http://127.0.0.1:5182",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
@@ -97,7 +123,7 @@ async def websocket_endpoint(websocket: WebSocket, generation_id: str):
     except WebSocketDisconnect:
         manager.disconnect(websocket, generation_id)
     except Exception as e:
-        print(f"⚠️ WebSocket error: {e}")
+        print(f"[WARN] WebSocket error: {e}")
         manager.disconnect(websocket, generation_id)
 
 

@@ -2,12 +2,14 @@
  * Hook for managing app generation lifecycle with multi-screen flow.
  */
 import { useState, useCallback } from 'react';
+import { useGenerationContext } from '../context/GenerationContext';
 
 type Screen = 'creation' | 'progress' | 'confirmation' | 'deploy' | 'success';
 
 interface GenerationState {
   currentScreen: Screen;
   generationId: string | null;
+  isGenerating: boolean;
   design: any | null;
   deployProvider: string | null;
   currentStep: number;
@@ -20,6 +22,7 @@ export function useGeneration() {
   const [state, setState] = useState<GenerationState>({
     currentScreen: 'creation',
     generationId: null,
+    isGenerating: false,
     design: null,
     deployProvider: null,
     currentStep: 0,
@@ -28,10 +31,22 @@ export function useGeneration() {
     error: null,
   });
 
+  const { setActiveGenerationId } = useGenerationContext();
+
   const startGeneration = useCallback(async (data: any) => {
+    // Block double-click
+    if (state.isGenerating) return;
+
+    setState(prev => ({
+      ...prev,
+      isGenerating: true,
+      currentScreen: 'progress',
+      error: null,
+    }));
+
     try {
       // Step 1: Send generation request
-      const res = await fetch('http://localhost:8000/api/generation/start', {
+      const res = await fetch('http://localhost:9000/api/generation/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -41,20 +56,22 @@ export function useGeneration() {
       });
 
       if (!res.ok) {
-        throw new Error('Failed to start generation');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to start generation');
       }
 
       const json = await res.json();
 
       setState(prev => ({
         ...prev,
-        currentScreen: 'progress',
-        generationId: json.id,
-        error: null,
+        generationId: json.generation_id,
       }));
 
+      // Notify context so ProjectHistory can show progress
+      setActiveGenerationId(json.generation_id);
+
       // Step 2: Connect WebSocket for progress updates
-      const ws = new WebSocket(`ws://localhost:8000/ws/generation/${json.id}`);
+      const ws = new WebSocket(`ws://localhost:9000/ws/generation/${json.generation_id}`);
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
@@ -81,6 +98,7 @@ export function useGeneration() {
           setState(prev => ({
             ...prev,
             currentScreen: 'success',
+            isGenerating: false,
           }));
           ws.close();
         }
@@ -90,11 +108,16 @@ export function useGeneration() {
         setState(prev => ({
           ...prev,
           error: 'WebSocket connection error',
+          isGenerating: false,
         }));
       };
 
       ws.onclose = () => {
         console.log('WebSocket closed');
+        setState(prev => ({
+          ...prev,
+          isGenerating: false,
+        }));
       };
 
     } catch (err: any) {
@@ -102,9 +125,10 @@ export function useGeneration() {
         ...prev,
         error: err.message || 'Failed to start generation',
         currentScreen: 'creation',
+        isGenerating: false,
       }));
     }
-  }, []);
+  }, [state.isGenerating]);
 
   const confirmGeneration = useCallback(() => {
     setState(prev => ({

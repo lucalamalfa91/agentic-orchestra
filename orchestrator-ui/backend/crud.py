@@ -103,6 +103,32 @@ def get_project_requirements(db: Session, project_id: int) -> Optional[models.Pr
     ).first()
 
 
+def delete_project(db: Session, project_id: int) -> bool:
+    """Delete a project."""
+    project = get_project_by_id(db, project_id)
+    if project:
+        db.delete(project)
+        db.commit()
+        return True
+    return False
+
+
+def delete_project_requirements(db: Session, project_id: int) -> None:
+    """Delete all requirements for a project."""
+    db.query(models.ProjectRequirement).filter(
+        models.ProjectRequirement.project_id == project_id
+    ).delete()
+    db.commit()
+
+
+def delete_project_logs(db: Session, project_id: int) -> None:
+    """Delete all logs for a project."""
+    db.query(models.GenerationLog).filter(
+        models.GenerationLog.project_id == project_id
+    ).delete()
+    db.commit()
+
+
 def create_generation_log(
     db: Session,
     project_id: Optional[int],
@@ -178,10 +204,10 @@ def save_project_metadata(
             message=f"Successfully published to GitHub: {github_repo_url}"
         )
 
-        print(f"✅ Saved project metadata to database: {app_name} (ID: {project.id})")
+        print(f"[OK] Saved project metadata to database: {app_name} (ID: {project.id})")
 
     except Exception as e:
-        print(f"⚠️ Warning: Failed to save project metadata to database: {e}")
+        print(f"[WARN] Warning: Failed to save project metadata to database: {e}")
     finally:
         db.close()
 

@@ -86,7 +86,7 @@ export default function AIProviderSetup() {
             Configure AI Provider
           </h1>
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Connect your AI provider to power the application generation
+            Connect your AI provider to start generating MVPs
           </p>
         </div>
 

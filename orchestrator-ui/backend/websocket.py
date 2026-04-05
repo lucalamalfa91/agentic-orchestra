@@ -20,7 +20,7 @@ class ConnectionManager:
         if generation_id not in self.active_connections:
             self.active_connections[generation_id] = set()
         self.active_connections[generation_id].add(websocket)
-        print(f"✅ WebSocket connected for generation: {generation_id}")
+        print(f"[OK] WebSocket connected for generation: {generation_id}")
 
     def disconnect(self, websocket: WebSocket, generation_id: str):
         """Remove a WebSocket connection."""
@@ -28,7 +28,7 @@ class ConnectionManager:
             self.active_connections[generation_id].discard(websocket)
             if not self.active_connections[generation_id]:
                 del self.active_connections[generation_id]
-        print(f"❌ WebSocket disconnected for generation: {generation_id}")
+        print(f"[DISCONNECTED] WebSocket disconnected for generation: {generation_id}")
 
     async def broadcast(self, generation_id: str, message: dict):
         """
@@ -43,7 +43,7 @@ class ConnectionManager:
             try:
                 await connection.send_json(message)
             except Exception as e:
-                print(f"⚠️ Error sending message to WebSocket: {e}")
+                print(f"[WARN] Error sending message to WebSocket: {e}")
                 disconnected.add(connection)
 
         # Clean up disconnected clients
