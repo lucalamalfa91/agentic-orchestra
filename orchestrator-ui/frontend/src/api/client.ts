@@ -11,7 +11,7 @@ import type {
   GenerationLog
 } from '../types';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:9000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -81,6 +81,19 @@ export const projectsApi = {
    */
   async getProjectLogs(projectId: number): Promise<GenerationLog[]> {
     const response = await api.get<GenerationLog[]>(`/api/projects/${projectId}/logs`);
+    return response.data;
+  },
+
+  /**
+   * Update project status.
+   */
+  async updateProjectStatus(
+    projectId: string | number,
+    status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  ): Promise<any> {
+    const response = await api.patch(`/api/projects/${projectId}/status`, {
+      status,
+    });
     return response.data;
   },
 };

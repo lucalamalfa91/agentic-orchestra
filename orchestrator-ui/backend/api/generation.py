@@ -71,11 +71,11 @@ async def run_generation_background(
     try:
         project_id = await orchestrator.run_generation(generation_id, request, db)
         if project_id:
-            print(f"✅ Generation completed successfully! Project ID: {project_id}")
+            print(f"[OK] Generation completed successfully! Project ID: {project_id}")
         else:
-            print(f"❌ Generation failed for {generation_id}")
+            print(f"[ERROR] Generation failed for {generation_id}")
     except Exception as e:
-        print(f"❌ Background task error: {e}")
+        print(f"[ERROR] Background task error: {e}")
     finally:
         db.close()
 
@@ -112,7 +112,17 @@ async def start_generation(
         Configuration.user_id == user_id,
         Configuration.is_active == True
     ).first()
+
+    print(f"DEBUG: user_id={user_id}, config={config}")
+    if config:
+        print(f"DEBUG: config.is_active={config.is_active}, config.ai_base_url={config.ai_base_url}")
+
     if not config:
+        # Check all configs for this user
+        all_configs = db.query(Configuration).filter(Configuration.user_id == user_id).all()
+        print(f"DEBUG: All configs for user {user_id}: {len(all_configs)}")
+        for cfg in all_configs:
+            print(f"  - id={cfg.id}, is_active={cfg.is_active}, base_url={cfg.ai_base_url}")
         raise HTTPException(status_code=400, detail="AI provider not configured")
 
     # Generate unique ID
@@ -129,7 +139,7 @@ async def start_generation(
     return schemas.GenerationStartResponse(
         generation_id=generation_id,
         message="Generation started successfully",
-        websocket_url=f"ws://localhost:8000/ws/generation/{generation_id}"
+        websocket_url=f"ws://localhost:9000/ws/generation/{generation_id}"
     )
 
 
@@ -145,3 +155,53 @@ def get_generation_status(generation_id: str):
         status="in_progress",
         message="Check WebSocket for real-time updates"
     )
+
+
+@router.post("/{generation_id}/cancel")
+def cancel_generation(generation_id: str, db: Session = Depends(get_db)):
+    """
+    Cancel an ongoing generation and mark associated project as failed.
+    """
+    try:
+        # Find project with this generation ID in logs
+        log = db.query(schemas if hasattr(schemas, 'GenerationLog') else type('obj', (object,), {})) \
+            .filter_by(step_name=generation_id).first() if hasattr(schemas, 'GenerationLog') else None
+
+        # Alternative: search by message containing generation_id
+        from orchestrator_ui.backend.models import GenerationLog, Project
+
+        logs = db.query(GenerationLog).filter(
+            GenerationLog.project_id.isnot(None)
+        ).all()
+
+        # Find the most recent project that was being generated
+        project = None
+        for log in reversed(logs):
+            if log.project_id:
+                project = db.query(Project).filter(Project.id == log.project_id).first()
+                if project and project.status == 'in_progress':
+                    break
+
+        if project:
+            # Update project status to failed
+            from orchestrator_ui.backend import crud
+            crud.update_project_status(db, project.id, 'failed')
+
+            return {
+                "status": "cancelled",
+                "generation_id": generation_id,
+                "project_id": project.id,
+                "message": "Generation cancelled and marked as failed"
+            }
+
+        return {
+            "status": "cancel_requested",
+            "generation_id": generation_id,
+            "message": "Cancellation requested"
+        }
+    except Exception as e:
+        print(f"[ERROR] Error cancelling generation: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }

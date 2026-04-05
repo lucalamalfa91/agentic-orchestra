@@ -5,6 +5,8 @@ import React, { useEffect, useState } from 'react';
 import { projectsApi } from '../api/client';
 import type { Project } from '../types';
 import ProjectCard from './ProjectCard';
+import GenerationProgressViewer from './GenerationProgressViewer';
+import { useGenerationContext } from '../context/GenerationContext';
 
 interface ProjectHistoryProps {
   onEdit: (projectId: number) => void;
@@ -18,6 +20,14 @@ const ProjectHistory: React.FC<ProjectHistoryProps> = ({ onEdit, refreshTrigger 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [progressGenerationId, setProgressGenerationId] = useState<string | null>(null);
+  const { activeGenerationId } = useGenerationContext();
+
+  useEffect(() => {
+    if (activeGenerationId) {
+      setProgressGenerationId(activeGenerationId);
+    }
+  }, [activeGenerationId]);
 
   const fetchProjects = async () => {
     try {
@@ -44,6 +54,45 @@ const ProjectHistory: React.FC<ProjectHistoryProps> = ({ onEdit, refreshTrigger 
       (project.description &&
         project.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const handleViewProgress = (projectId: string) => {
+    setProgressGenerationId(projectId);
+  };
+
+  const handleStopGeneration = async (projectId: string) => {
+    if (window.confirm('Stop generation for this project?')) {
+      try {
+        await fetch(`http://localhost:9000/api/generation/${projectId}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('jwt_token')}`,
+          },
+        });
+        fetchProjects(); // Refresh list
+      } catch (err) {
+        console.error('Failed to stop generation:', err);
+        alert('Failed to stop generation');
+      }
+    }
+  };
+
+  const handleCardClick = async (project: Project) => {
+    if (project.status !== 'in_progress') return;
+
+    try {
+      // Immediate status change to failed (NO confirmation dialog)
+      await projectsApi.updateProjectStatus(project.id.toString(), 'failed');
+      // Refresh project list
+      await fetchProjects();
+    } catch (error) {
+      console.error('Failed to update project status:', error);
+      alert('Failed to update project status');
+    }
+  };
+
+  const handleDelete = () => {
+    fetchProjects(); // Refresh list after delete
+  };
 
   if (loading && projects.length === 0) {
     return (
@@ -117,13 +166,21 @@ const ProjectHistory: React.FC<ProjectHistoryProps> = ({ onEdit, refreshTrigger 
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No projects</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {searchTerm ? 'No projects match your search.' : 'Generate your first app to get started!'}
+            {searchTerm ? 'No projects match your search.' : 'Generate your first MVP to get started!'}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => (
-            <ProjectCard key={project.id} project={project} onEdit={onEdit} />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onEdit={onEdit}
+              onViewProgress={handleViewProgress}
+              onStopGeneration={handleStopGeneration}
+              onDelete={handleDelete}
+              onCardClick={handleCardClick}
+            />
           ))}
         </div>
       )}
@@ -149,6 +206,13 @@ const ProjectHistory: React.FC<ProjectHistoryProps> = ({ onEdit, refreshTrigger 
             Next
           </button>
         </div>
+      )}
+
+      {progressGenerationId && (
+        <GenerationProgressViewer
+          generationId={progressGenerationId}
+          onClose={() => setProgressGenerationId(null)}
+        />
       )}
     </div>
   );

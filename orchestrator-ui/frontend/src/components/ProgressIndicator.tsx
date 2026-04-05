@@ -45,10 +45,10 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({
             backgroundClip: 'text'
           }}
         >
-          Generating Your Application
+          Building Your MVP
         </h2>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-          AI agents are working together to build your app
+          AI agents are assembling your prototype
         </p>
       </div>
 

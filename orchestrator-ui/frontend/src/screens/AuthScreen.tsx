@@ -93,7 +93,7 @@ export default function AuthScreen() {
               fontWeight: 300
             }}
           >
-            AI-Powered App Generation
+            Rapid MVP Generator
           </p>
         </div>
 
@@ -106,7 +106,7 @@ export default function AuthScreen() {
             lineHeight: 1.6
           }}
         >
-          Connect with GitHub to start building amazing applications with our AI-driven platform
+          Turn business ideas into working prototypes. Test concepts, build mockups, and pitch MVPs to clients
         </p>
 
         {/* Error Message */}

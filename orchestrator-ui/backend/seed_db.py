@@ -28,7 +28,7 @@ def seed_example_project():
         ).first()
 
         if existing:
-            print("⚠️  Como Weather example already exists in database")
+            print("[WARN] Como Weather example already exists in database")
             return
 
         # Create example project
@@ -93,12 +93,12 @@ Technical:
 
         db.commit()
 
-        print(f"✅ Added Como Weather example project (ID: {project.id})")
+        print(f"[OK] Added Como Weather example project (ID: {project.id})")
         print(f"   - Features: {len(features)}")
         print(f"   - Logs: {len(steps)}")
 
     except Exception as e:
-        print(f"❌ Error seeding database: {e}")
+        print(f"[ERROR] Error seeding database: {e}")
         db.rollback()
     finally:
         db.close()

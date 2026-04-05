@@ -11,12 +11,12 @@ export default function PromptHero({ value, onChange }: any) {
           fontSize: 'var(--font-size-xl)'
         }}
       >
-        What app do you want to build?
+        What idea do you want to prototype?
       </label>
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Describe your app idea in detail... For example: 'A task management app with user authentication, real-time collaboration, email notifications, and mobile responsive design'"
+        placeholder="Describe your MVP idea... For example: 'A landing page with waitlist signup for a pet-sitting marketplace' or 'A dashboard mockup for a SaaS analytics tool to pitch to investors'"
         className="input-glass min-h-48 text-lg focus-ring resize-y"
         style={{
           background: 'rgba(255, 255, 255, 0.05)',

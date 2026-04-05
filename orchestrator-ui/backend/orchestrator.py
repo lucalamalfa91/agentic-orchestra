@@ -100,7 +100,7 @@ class GenerationOrchestrator:
 
         # Write file
         self.requirements_file.write_text(content, encoding="utf-8")
-        print(f"✅ Written requirements to: {self.requirements_file}")
+        print(f"[OK] Written requirements to: {self.requirements_file}")
 
     async def broadcast_progress(
         self,
@@ -253,7 +253,7 @@ class GenerationOrchestrator:
                 # Failed
                 stderr = await process.stderr.read()
                 error_message = stderr.decode("utf-8")
-                print(f"❌ Generation failed: {error_message}")
+                print(f"[ERROR] Generation failed: {error_message}")
 
                 crud.update_project_status(db, project.id, "failed")
                 crud.create_generation_log(
@@ -276,7 +276,7 @@ class GenerationOrchestrator:
                 return None
 
         except Exception as e:
-            print(f"❌ Exception during generation: {e}")
+            print(f"[ERROR] Exception during generation: {e}")
 
             if project:
                 crud.update_project_status(db, project.id, "failed")

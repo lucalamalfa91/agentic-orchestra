@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AIProviderProvider } from './context/AIProviderContext';
+import { GenerationProvider } from './context/GenerationContext';
 import AuthScreen from './screens/AuthScreen';
 import OAuthCallback from './screens/OAuthCallback';
 import AIProviderSetup from './screens/AIProviderSetup';
@@ -77,10 +78,10 @@ function AppContent() {
       }}>
         <div className="max-w-7xl mx-auto px-6 py-8 text-center">
           <p className="text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
-            Built with precision by Agentic Orchestra
+            From idea to MVP in minutes
           </p>
           <p className="text-xs mt-2" style={{ color: 'var(--color-text-tertiary)', opacity: 0.6 }}>
-            Powered by AI-driven development
+            Validate your business ideas with AI-generated prototypes
           </p>
         </div>
       </footer>
@@ -133,9 +134,11 @@ export default function App() {
   return (
     <AuthProvider>
       <AIProviderProvider>
-        <BrowserRouter>
-          <AutoAuthWrapper />
-        </BrowserRouter>
+        <GenerationProvider>
+          <BrowserRouter>
+            <AutoAuthWrapper />
+          </BrowserRouter>
+        </GenerationProvider>
       </AIProviderProvider>
     </AuthProvider>
   );

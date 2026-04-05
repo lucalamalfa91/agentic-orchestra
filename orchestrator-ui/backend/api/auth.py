@@ -10,15 +10,17 @@ from datetime import datetime, timedelta
 
 try:
     from orchestrator_ui.backend.oauth_handlers import github, vercel, railway
-    from orchestrator_ui.backend.models import User, DeployProviderAuth
+    from orchestrator_ui.backend.models import User, DeployProviderAuth, Configuration
     from orchestrator_ui.backend.database import get_db
+    from orchestrator_ui.backend.encryption_service import encrypt
 except ModuleNotFoundError:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from oauth_handlers import github, vercel, railway
-    from models import User, DeployProviderAuth
+    from models import User, DeployProviderAuth, Configuration
     from database import get_db
+    from encryption_service import encrypt
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -121,6 +123,26 @@ def github_login_with_gh(db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
+        # Auto-configure AI provider from environment variables if not already configured
+        ai_base_url = os.getenv("ADESSO_BASE_URL", "").strip()
+        ai_api_key = os.getenv("ADESSO_AI_HUB_KEY", "").strip()
+
+        if ai_base_url and ai_api_key:
+            # Check if config exists
+            config = db.query(Configuration).filter(Configuration.user_id == user.id).first()
+            if not config:
+                config = Configuration(
+                    user_id=user.id,
+                    ai_base_url=ai_base_url,
+                    ai_api_key_encrypted=encrypt(ai_api_key),
+                    is_active=True,
+                )
+                db.add(config)
+            else:
+                # Update existing config to be active
+                config.is_active = True
+            db.commit()
+
         # Generate JWT token
         jwt_secret = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
         jwt_token = jwt.encode(
@@ -138,6 +160,9 @@ def github_login_with_gh(db: Session = Depends(get_db)):
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=401, detail=f"gh CLI error: {e.stderr}")
     except Exception as e:
+        import traceback
+        print(f"ERROR in login-with-gh: {e}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
 

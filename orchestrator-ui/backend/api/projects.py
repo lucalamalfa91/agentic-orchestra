@@ -1,8 +1,9 @@
 """
 Projects API endpoints.
 """
-from typing import List
+from typing import List, Literal
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 try:
@@ -17,6 +18,11 @@ except ModuleNotFoundError:
     from database import get_db
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+class ProjectStatusUpdate(BaseModel):
+    """Schema for updating project status."""
+    status: Literal["pending", "in_progress", "completed", "failed"]
 
 
 @router.get("/", response_model=schemas.PaginatedProjects)
@@ -93,3 +99,40 @@ def get_project_logs(project_id: int, db: Session = Depends(get_db)):
 
     logs = crud.get_project_logs(db, project_id)
     return logs
+
+
+@router.patch("/{project_id}/status", response_model=schemas.ProjectResponse)
+def update_project_status_endpoint(
+    project_id: int,
+    status_update: ProjectStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update project status.
+    """
+    project = crud.update_project_status(db, project_id, status_update.status)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@router.delete("/{project_id}")
+def delete_project(project_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a project and its associated data.
+    """
+    project = crud.get_project_by_id(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    try:
+        # Delete requirements
+        crud.delete_project_requirements(db, project_id)
+        # Delete logs
+        crud.delete_project_logs(db, project_id)
+        # Delete project
+        crud.delete_project(db, project_id)
+
+        return {"status": "deleted", "project_id": project_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")
