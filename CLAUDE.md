@@ -8,31 +8,6 @@ Do not write any code before completing steps 1-3.
 
 ---
 
-## How to run a task
-All tasks are pre-written as prompt files. Execute them like this:
-
-```
-Read and execute the task in .claude/prompts/prompt_01_analysis.md
-```
-
-### Available prompts (execute in order)
-| File | Task |
-|---|---|
-| `.claude/prompts/prompt_01_analysis.md` | Analyse current codebase, map agent flow and integrations |
-| `.claude/prompts/prompt_02_state_schema.md` | Create OrchestraState TypedDict + AgentStatus enum |
-| `.claude/prompts/prompt_03_langgraph_graph.md` | Create LangGraph graph with parallel fan-out (stub nodes) |
-| `.claude/prompts/prompt_04_knowledge_agent.md` | Generic Knowledge Agent + RAG sources + pgvector |
-| `.claude/prompts/prompt_05_mcp_servers.md` | MCP server wrappers for GitHub, Azure DevOps, Deploy |
-| `.claude/prompts/prompt_06_backend_integration.md` | Wire LangGraph into FastAPI orchestrator |
-| `.claude/prompts/prompt_07_agent_nodes.md` | Implement real agent nodes (one per session) |
-| `.claude/prompts/prompt_08_checkpoint_hitl.md` | Postgres checkpointing + human-in-the-loop design review |
-| `.claude/prompts/prompt_09_knowledge_ui.md` | React UI for managing Knowledge Sources |
-| `.claude/prompts/prompt_10_testing.md` | Test suite for all new AI components |
-
-Current step: see `.claude/context/migration_status.md`
-
----
-
 ## What this project is
 A FastAPI + React app that orchestrates multiple AI agents to generate
 full-stack MVP applications from a text description.
@@ -65,8 +40,7 @@ orchestrator-ui/backend/api/            -> FastAPI routers
 
 ---
 
-## Absolute rules (never break these)
-- NEVER modify `run_all_agents.py` - kept as legacy fallback
+## Absolute rules (never break these) 
 - NEVER change the WebSocket message format in `orchestrator.py`
   (frontend depends on exact string format of STEP_MARKERS)
 - NEVER hardcode API keys or tokens - always read from env vars
