@@ -1,88 +1,101 @@
 """
-WebSocket manager for real-time progress updates.
-Includes a per-generation message buffer so messages sent before
-the client connects are not lost (race condition fix).
+WebSocket connection manager for real-time generation progress.
 """
-from collections import deque
-from typing import Dict, Set, Deque
-from fastapi import WebSocket
-
-# Max messages buffered per generation while waiting for client to connect
-_BUFFER_MAX = 100
+import json
+import asyncio
+from typing import Dict, List
+from fastapi import WebSocket, WebSocketDisconnect
 
 
 class ConnectionManager:
     """
-    Manages WebSocket connections for real-time updates.
-    Buffers up to _BUFFER_MAX messages per generation so that progress
-    events emitted before the frontend connects are not silently dropped.
+    Manages WebSocket connections grouped by generation_id.
     """
 
     def __init__(self):
-        # Map generation_id -> set of active WebSocket connections
-        self.active_connections: Dict[str, Set[WebSocket]] = {}
-        # Map generation_id -> deque of buffered messages (sent before client arrives)
-        self._buffers: Dict[str, Deque[dict]] = {}
+        self.active_connections: Dict[str, List[WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket, generation_id: str):
-        """Accept a new WebSocket connection and flush any buffered messages."""
+    async def connect(self, generation_id: str, websocket: WebSocket):
         await websocket.accept()
         if generation_id not in self.active_connections:
-            self.active_connections[generation_id] = set()
-        self.active_connections[generation_id].add(websocket)
-        print(f"[OK] WebSocket connected for generation: {generation_id}")
+            self.active_connections[generation_id] = []
+        self.active_connections[generation_id].append(websocket)
+        conn_count = len(self.active_connections[generation_id])
+        print(f"[WS] CONNECT    generation_id={generation_id} "
+              f"total_connections={conn_count}")
 
-        # Flush buffered messages that arrived before this client connected
-        if generation_id in self._buffers:
-            buffered = self._buffers.pop(generation_id)
-            print(f"[WS] Flushing {len(buffered)} buffered messages to new client")
-            for msg in buffered:
-                try:
-                    await websocket.send_json(msg)
-                except Exception as e:
-                    print(f"[WARN] Error flushing buffered message: {e}")
-                    break
-
-    def disconnect(self, websocket: WebSocket, generation_id: str):
-        """Remove a WebSocket connection."""
+    def disconnect(self, generation_id: str, websocket: WebSocket):
         if generation_id in self.active_connections:
-            self.active_connections[generation_id].discard(websocket)
-            if not self.active_connections[generation_id]:
+            try:
+                self.active_connections[generation_id].remove(websocket)
+            except ValueError:
+                pass
+            remaining = len(self.active_connections[generation_id])
+            print(f"[WS] DISCONNECT generation_id={generation_id} "
+                  f"remaining_connections={remaining}")
+            if remaining == 0:
                 del self.active_connections[generation_id]
-        print(f"[DISCONNECTED] WebSocket disconnected for generation: {generation_id}")
+                print(f"[WS] CLEANUP    generation_id={generation_id} (no listeners)")
 
     async def broadcast(self, generation_id: str, message: dict):
-        """
-        Broadcast a message to all connections for a specific generation.
-        If no client is connected yet, buffer the message for later delivery.
-        """
         if generation_id not in self.active_connections:
-            # No client connected yet — buffer the message
-            if generation_id not in self._buffers:
-                self._buffers[generation_id] = deque(maxlen=_BUFFER_MAX)
-            self._buffers[generation_id].append(message)
-            print(f"[WS] Buffered message (no client yet): type={message.get('type')} step={message.get('step')}")
+            print(f"[WS] BROADCAST  generation_id={generation_id} "
+                  f"WARNING: no active connections, message dropped: step={message.get('step')} "
+                  f"pct={message.get('percentage')}")
             return
 
-        # Send to all active connections
-        disconnected = set()
-        for connection in self.active_connections[generation_id]:
+        payload = json.dumps(message)
+        listeners = list(self.active_connections[generation_id])
+        print(f"[WS] BROADCAST  generation_id={generation_id} "
+              f"listeners={len(listeners)} "
+              f"step={message.get('step')} "
+              f"step_number={message.get('step_number')} "
+              f"pct={message.get('percentage')} "
+              f"msg={message.get('message', '')[:60]}")
+
+        dead = []
+        for ws in listeners:
             try:
-                await connection.send_json(message)
+                await ws.send_text(payload)
             except Exception as e:
-                print(f"[WARN] Error sending message to WebSocket: {e}")
-                disconnected.add(connection)
+                print(f"[WS] SEND_ERROR generation_id={generation_id} "
+                      f"error={e}")
+                dead.append(ws)
 
-        # Clean up disconnected clients
-        for connection in disconnected:
-            self.disconnect(connection, generation_id)
+        for ws in dead:
+            self.disconnect(generation_id, ws)
 
-    def get_connection_count(self, generation_id: str) -> int:
-        """Get number of active connections for a generation."""
-        if generation_id not in self.active_connections:
-            return 0
-        return len(self.active_connections[generation_id])
+    async def send_error(self, generation_id: str, error_message: str):
+        print(f"[WS] ERROR      generation_id={generation_id} "
+              f"error={error_message[:200]}")
+        await self.broadcast(generation_id, {
+            "type": "error",
+            "step": "error",
+            "step_number": 0,
+            "percentage": 0,
+            "message": f"Generation failed: {error_message}",
+        })
 
 
-# Global connection manager instance
 manager = ConnectionManager()
+
+
+async def websocket_endpoint(websocket: WebSocket, generation_id: str):
+    """
+    FastAPI WebSocket endpoint handler.
+    Keeps the connection alive until the client disconnects.
+    """
+    await manager.connect(generation_id, websocket)
+    try:
+        while True:
+            # Keep-alive: just drain any incoming pings; we only push from server
+            data = await asyncio.wait_for(websocket.receive_text(), timeout=300)
+            print(f"[WS] RECV       generation_id={generation_id} data={data[:80]}")
+    except asyncio.TimeoutError:
+        print(f"[WS] TIMEOUT    generation_id={generation_id} (300s idle, closing)")
+    except WebSocketDisconnect as e:
+        print(f"[WS] CLIENT_DC  generation_id={generation_id} code={e.code}")
+    except Exception as e:
+        print(f"[WS] EXCEPTION  generation_id={generation_id} error={e}")
+    finally:
+        manager.disconnect(generation_id, websocket)
