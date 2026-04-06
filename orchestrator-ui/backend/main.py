@@ -28,14 +28,10 @@ async def lifespan(app: FastAPI):
     """
     Application lifespan handler - runs on startup and shutdown.
     """
-    # Startup: Initialize database
     print("Starting Orchestrator UI Backend...")
     init_db()
     print("Database initialized")
-
     yield
-
-    # Shutdown
     print("Shutting down Orchestrator UI Backend...")
 
 
@@ -47,35 +43,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS - MUST be added before routers
+# Configure CORS
+# NOTE: allow_origins=["*"] is intentional for local development.
+# In production, set ALLOWED_ORIGINS env var and restore explicit list.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://localhost:5176",
-        "http://localhost:5177",
-        "http://localhost:5178",
-        "http://localhost:5179",
-        "http://localhost:5180",
-        "http://localhost:5181",
-        "http://localhost:5182",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
-        "http://127.0.0.1:5176",
-        "http://127.0.0.1:5177",
-        "http://127.0.0.1:5178",
-        "http://127.0.0.1:5179",
-        "http://127.0.0.1:5180",
-        "http://127.0.0.1:5181",
-        "http://127.0.0.1:5182",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
@@ -108,23 +83,20 @@ def health_check():
 async def websocket_endpoint(websocket: WebSocket, generation_id: str):
     """
     WebSocket endpoint for real-time generation progress updates.
+    Args are passed positionally — generation_id first, websocket second,
+    matching ConnectionManager.connect(self, generation_id, websocket).
     """
-    await manager.connect(websocket, generation_id)
+    await manager.connect(generation_id, websocket)  # order matters!
     try:
-        # Keep connection alive and listen for messages
         while True:
-            # Wait for any message from client (heartbeat)
             data = await websocket.receive_text()
-
-            # Echo back for heartbeat
             if data == "ping":
                 await websocket.send_text("pong")
-
     except WebSocketDisconnect:
-        manager.disconnect(websocket, generation_id)
+        manager.disconnect(generation_id, websocket)
     except Exception as e:
         print(f"[WARN] WebSocket error: {e}")
-        manager.disconnect(websocket, generation_id)
+        manager.disconnect(generation_id, websocket)
 
 
 if __name__ == "__main__":
@@ -132,7 +104,6 @@ if __name__ == "__main__":
     import uvicorn
 
     port = 8000
-    # Check for port override from environment or command line
     if len(sys.argv) > 1 and sys.argv[1].isdigit():
         port = int(sys.argv[1])
 
