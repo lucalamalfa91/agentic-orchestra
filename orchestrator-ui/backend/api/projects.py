@@ -2,7 +2,8 @@
 Projects API endpoints.
 """
 from typing import List, Literal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -19,10 +20,22 @@ except ModuleNotFoundError:
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+}
+
 
 class ProjectStatusUpdate(BaseModel):
     """Schema for updating project status."""
     status: Literal["pending", "in_progress", "completed", "failed"]
+
+
+@router.options("/{project_id}/status")
+async def options_project_status(project_id: int):
+    """Explicit OPTIONS handler so CORS preflight always returns 200."""
+    return JSONResponse(status_code=200, content={}, headers=CORS_HEADERS)
 
 
 @router.get("/", response_model=schemas.PaginatedProjects)
@@ -42,7 +55,7 @@ def list_projects(
     skip = (page - 1) * page_size
     projects = crud.get_projects(db, skip=skip, limit=page_size)
     total = crud.get_projects_count(db)
-    total_pages = (total + page_size - 1) // page_size  # Ceiling division
+    total_pages = (total + page_size - 1) // page_size
 
     return schemas.PaginatedProjects(
         items=projects,
@@ -62,7 +75,6 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Get requirements if they exist
     requirements = crud.get_project_requirements(db, project_id)
 
     return schemas.ProjectWithRequirements(
@@ -126,13 +138,9 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     try:
-        # Delete requirements
         crud.delete_project_requirements(db, project_id)
-        # Delete logs
         crud.delete_project_logs(db, project_id)
-        # Delete project
         crud.delete_project(db, project_id)
-
         return {"status": "deleted", "project_id": project_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")

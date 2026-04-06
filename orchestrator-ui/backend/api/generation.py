@@ -5,6 +5,7 @@ import asyncio
 import jwt
 import os
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Header
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 try:
@@ -24,7 +25,6 @@ except ModuleNotFoundError:
 router = APIRouter(prefix="/api/generation", tags=["generation"])
 orchestrator = GenerationOrchestrator()
 
-# WebSocket base URL - override via WS_BASE_URL env var for production/docker
 WS_BASE_URL = os.getenv("WS_BASE_URL", "ws://localhost:8000")
 
 
@@ -103,7 +103,6 @@ async def start_generation(
 
     generation_id = generate_id()
 
-    # Pass user_id so orchestrator can fetch AI config from DB
     background_tasks.add_task(
         run_generation_background,
         generation_id,
@@ -128,26 +127,71 @@ def get_generation_status(generation_id: str):
     )
 
 
+def _cancel_project_by_id(project_id: int, db: Session):
+    """Shared cancel logic: marks an in_progress project as failed."""
+    try:
+        from orchestrator_ui.backend.models import Project
+        from orchestrator_ui.backend import crud
+    except ModuleNotFoundError:
+        from models import Project
+        import crud
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return {"status": "not_found", "project_id": project_id,
+                "message": f"Project {project_id} not found"}
+
+    if project.status == "in_progress":
+        crud.update_project_status(db, project_id, "failed")
+        print(f"[CANCEL] project_id={project_id} marked as failed")
+        return {"status": "cancelled", "project_id": project_id,
+                "message": "Generation cancelled"}
+
+    return {"status": "noop", "project_id": project_id,
+            "message": f"Project status is '{project.status}', nothing to cancel"}
+
+
+@router.post("/project/{project_id}/cancel")
+def cancel_generation_by_project(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Cancel generation using numeric project_id.
+    The frontend uses this because it does not have the generation UUID
+    after the WS session ends.
+    """
+    return _cancel_project_by_id(project_id, db)
+
+
 @router.post("/{generation_id}/cancel")
 def cancel_generation(generation_id: str, db: Session = Depends(get_db)):
+    """
+    Cancel generation using the generation UUID.
+    Kept for backwards compatibility; tries to find the matching project.
+    """
     try:
         from orchestrator_ui.backend.models import GenerationLog, Project
-        logs = db.query(GenerationLog).filter(
-            GenerationLog.project_id.isnot(None)
-        ).all()
-        project = None
-        for log in reversed(logs):
-            if log.project_id:
-                project = db.query(Project).filter(Project.id == log.project_id).first()
-                if project and project.status == 'in_progress':
-                    break
-        if project:
-            from orchestrator_ui.backend import crud
-            crud.update_project_status(db, project.id, 'failed')
-            return {"status": "cancelled", "generation_id": generation_id,
-                    "project_id": project.id, "message": "Generation cancelled"}
-        return {"status": "cancel_requested", "generation_id": generation_id,
-                "message": "Cancellation requested"}
-    except Exception as e:
-        print(f"[ERROR] Error cancelling generation: {e}")
-        return {"status": "error", "message": str(e)}
+        from orchestrator_ui.backend import crud
+    except ModuleNotFoundError:
+        from models import GenerationLog, Project
+        import crud
+
+    # Try to find the project linked to this generation via logs
+    logs = db.query(GenerationLog).all()
+    project = None
+    for log in reversed(logs):
+        if log.project_id:
+            p = db.query(Project).filter(Project.id == log.project_id).first()
+            if p and p.status == "in_progress":
+                project = p
+                break
+
+    if project:
+        crud.update_project_status(db, project.id, "failed")
+        print(f"[CANCEL] generation_id={generation_id} -> project_id={project.id} marked as failed")
+        return {"status": "cancelled", "generation_id": generation_id,
+                "project_id": project.id, "message": "Generation cancelled"}
+
+    return {"status": "cancel_requested", "generation_id": generation_id,
+            "message": "Cancellation requested (no in-progress project found)"}
