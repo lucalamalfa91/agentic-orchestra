@@ -2,8 +2,7 @@
 Orchestrator for running run_all_agents.py as a subprocess with progress tracking.
 """
 import asyncio
-import subprocess
-import re
+import sys
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -53,33 +52,23 @@ class GenerationOrchestrator:
     ) -> str:
         """
         Generate requirements.txt content from GenerationRequest.
-
-        Args:
-            request: Generation request with MVP description, features, tech stack
-
-        Returns:
-            Generated requirements.txt content
         """
         lines = []
 
-        # MVP Description
         lines.append(request.mvp_description)
         lines.append("")
 
-        # Features
         lines.append("Features:")
         for feature in request.features:
             lines.append(f"- {feature}")
         lines.append("")
 
-        # User Stories (optional)
         if request.user_stories:
             lines.append("User stories:")
             for story in request.user_stories:
                 lines.append(f"- {story}")
             lines.append("")
 
-        # Technical Requirements
         lines.append("Technical:")
         lines.append(f"- Frontend: {request.tech_stack.frontend}")
         lines.append(f"- Backend: {request.tech_stack.backend}")
@@ -89,16 +78,8 @@ class GenerationOrchestrator:
         return "\n".join(lines)
 
     def write_requirements_file(self, content: str) -> None:
-        """
-        Write requirements.txt to pipeline_data directory.
-
-        Args:
-            content: Requirements text content
-        """
-        # Ensure directory exists
+        """Write requirements.txt to pipeline_data directory."""
         self.pipeline_data_dir.mkdir(parents=True, exist_ok=True)
-
-        # Write file
         self.requirements_file.write_text(content, encoding="utf-8")
         print(f"[OK] Written requirements to: {self.requirements_file}")
 
@@ -110,16 +91,7 @@ class GenerationOrchestrator:
         percentage: int,
         message: str
     ):
-        """
-        Broadcast progress update via WebSocket.
-
-        Args:
-            generation_id: Unique generation ID
-            step: Step name (readme, design, backend, etc.)
-            step_number: Step number (1-6)
-            percentage: Completion percentage (0-100)
-            message: Progress message
-        """
+        """Broadcast progress update via WebSocket."""
         progress_message = {
             "type": "progress",
             "step": step,
@@ -190,9 +162,11 @@ class GenerationOrchestrator:
                 message="Starting app generation..."
             )
 
-            # Run run_all_agents.py as subprocess
+            # FIX: use sys.executable instead of bare 'python'
+            # This ensures the same virtualenv/interpreter that runs the server
+            # is used for the subprocess — avoids missing-dependencies crashes.
             process = await asyncio.create_subprocess_exec(
-                "python",
+                sys.executable,
                 "run_all_agents.py",
                 cwd=str(self.project_root),
                 stdout=asyncio.subprocess.PIPE,
@@ -214,7 +188,6 @@ class GenerationOrchestrator:
                     if marker in line_text:
                         current_step = step_info["step"]
 
-                        # Log step completion
                         crud.create_generation_log(
                             db=db,
                             project_id=project.id,
@@ -223,7 +196,6 @@ class GenerationOrchestrator:
                             message=f"{current_step.capitalize()} step completed"
                         )
 
-                        # Broadcast progress
                         await self.broadcast_progress(
                             generation_id=generation_id,
                             step=current_step,
@@ -236,10 +208,8 @@ class GenerationOrchestrator:
             await process.wait()
 
             if process.returncode == 0:
-                # Success!
                 crud.update_project_status(db, project.id, "completed")
 
-                # Broadcast completion
                 await self.broadcast_progress(
                     generation_id=generation_id,
                     step="complete",
@@ -250,7 +220,6 @@ class GenerationOrchestrator:
 
                 return project.id
             else:
-                # Failed
                 stderr = await process.stderr.read()
                 error_message = stderr.decode("utf-8")
                 print(f"[ERROR] Generation failed: {error_message}")
@@ -264,7 +233,6 @@ class GenerationOrchestrator:
                     message=f"Generation failed: {error_message[:500]}"
                 )
 
-                # Broadcast error
                 await self.broadcast_progress(
                     generation_id=generation_id,
                     step="error",
@@ -288,7 +256,6 @@ class GenerationOrchestrator:
                     message=str(e)
                 )
 
-            # Broadcast error
             await self.broadcast_progress(
                 generation_id=generation_id,
                 step="error",

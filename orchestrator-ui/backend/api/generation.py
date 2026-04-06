@@ -26,6 +26,10 @@ router = APIRouter(prefix="/api/generation", tags=["generation"])
 # Global orchestrator instance
 orchestrator = GenerationOrchestrator()
 
+# WebSocket base URL — override via WS_BASE_URL env var for production/docker
+# Default: ws://localhost:8000  (same port as the FastAPI server)
+WS_BASE_URL = os.getenv("WS_BASE_URL", "ws://localhost:8000")
+
 
 async def get_auth_user(authorization: str = Header(None)):
     """
@@ -67,8 +71,13 @@ async def run_generation_background(
 ):
     """
     Background task to run generation.
+    Waits 1.5s before starting so the frontend WebSocket has time to connect.
     """
     try:
+        # Small delay to let the frontend open the WebSocket connection
+        # before we start broadcasting progress messages.
+        await asyncio.sleep(1.5)
+
         project_id = await orchestrator.run_generation(generation_id, request, db)
         if project_id:
             print(f"[OK] Generation completed successfully! Project ID: {project_id}")
@@ -95,7 +104,7 @@ async def start_generation(
     2. Checks GitHub connection
     3. Checks AI provider configuration
     4. Generates a unique generation ID
-    5. Starts generation in background
+    5. Starts generation in background (with 1.5s delay for WS connect)
     6. Returns WebSocket URL for progress tracking
     """
     # Check if user exists
@@ -136,10 +145,11 @@ async def start_generation(
         db
     )
 
+    # FIX: use WS_BASE_URL env var (was hardcoded to wrong port 9000)
     return schemas.GenerationStartResponse(
         generation_id=generation_id,
         message="Generation started successfully",
-        websocket_url=f"ws://localhost:9000/ws/generation/{generation_id}"
+        websocket_url=f"{WS_BASE_URL}/ws/generation/{generation_id}"
     )
 
 
@@ -148,8 +158,6 @@ def get_generation_status(generation_id: str):
     """
     Get current status of a generation (for polling fallback).
     """
-    # This is a simple implementation - in production you'd track status in memory or DB
-    # For now, just return a basic response
     return schemas.GenerationStatus(
         generation_id=generation_id,
         status="in_progress",
@@ -163,18 +171,13 @@ def cancel_generation(generation_id: str, db: Session = Depends(get_db)):
     Cancel an ongoing generation and mark associated project as failed.
     """
     try:
-        # Find project with this generation ID in logs
-        log = db.query(schemas if hasattr(schemas, 'GenerationLog') else type('obj', (object,), {})) \
-            .filter_by(step_name=generation_id).first() if hasattr(schemas, 'GenerationLog') else None
-
-        # Alternative: search by message containing generation_id
         from orchestrator_ui.backend.models import GenerationLog, Project
 
         logs = db.query(GenerationLog).filter(
             GenerationLog.project_id.isnot(None)
         ).all()
 
-        # Find the most recent project that was being generated
+        # Find the most recent in-progress project
         project = None
         for log in reversed(logs):
             if log.project_id:
@@ -183,10 +186,8 @@ def cancel_generation(generation_id: str, db: Session = Depends(get_db)):
                     break
 
         if project:
-            # Update project status to failed
             from orchestrator_ui.backend import crud
             crud.update_project_status(db, project.id, 'failed')
-
             return {
                 "status": "cancelled",
                 "generation_id": generation_id,
