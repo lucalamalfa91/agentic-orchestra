@@ -12,11 +12,27 @@ interface Step {
 
 interface GenerationProgressViewerProps {
   generationId: string;
+  /** Full WebSocket URL returned by /api/generation/start (e.g. ws://host:port/ws/generation/<id>).
+   *  If omitted, the URL is derived automatically from window.location so it always
+   *  points to the same host/port the frontend is talking to. */
+  websocketUrl?: string;
   onClose: () => void;
+}
+
+/** Derive the WS URL from the current page location as a safe fallback.
+ *  Works regardless of port, hostname or protocol (http → ws, https → wss). */
+function deriveWsUrl(generationId: string): string {
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const host = window.location.hostname;
+  // Vite dev-proxy forwards /api and /ws to the backend on VITE_API_PORT (default 8000).
+  // If a proxy is set up the same origin works; otherwise fall back to :8000.
+  const port = window.location.port || '8000';
+  return `${proto}://${host}:${port}/ws/generation/${generationId}`;
 }
 
 const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
   generationId,
+  websocketUrl,
   onClose,
 }) => {
   const [steps, setSteps] = useState<Step[]>([
@@ -33,9 +49,12 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    const ws = new WebSocket(
-      `ws://localhost:9000/ws/generation/${generationId}`
-    );
+
+    // Prefer the URL from the API response; fall back to auto-derived URL.
+    const wsUrl = websocketUrl || deriveWsUrl(generationId);
+    console.log('[WS] Connecting to:', wsUrl);
+
+    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       if (cancelled) { ws.close(); return; }
@@ -98,31 +117,23 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
         ws.close();
       }
     };
-  }, [generationId]);
+  }, [generationId, websocketUrl]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed':
-        return '#10b981';
-      case 'running':
-        return '#3b82f6';
-      case 'failed':
-        return '#ef4444';
-      default:
-        return '#9ca3af';
+      case 'completed': return '#10b981';
+      case 'running':   return '#3b82f6';
+      case 'failed':    return '#ef4444';
+      default:          return '#9ca3af';
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'completed':
-        return 'OK';
-      case 'running':
-        return '...';
-      case 'failed':
-        return 'X';
-      default:
-        return '-';
+      case 'completed': return 'OK';
+      case 'running':   return '...';
+      case 'failed':    return 'X';
+      default:          return '-';
     }
   };
 
@@ -130,10 +141,7 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
     <div
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        top: 0, left: 0, right: 0, bottom: 0,
         background: 'rgba(0, 0, 0, 0.7)',
         display: 'flex',
         alignItems: 'center',
@@ -160,32 +168,17 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
         {/* Header */}
         <div style={{ marginBottom: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2
-              style={{
-                color: '#ffffff',
-                fontSize: '1.5rem',
-                fontWeight: 'bold',
-                margin: 0,
-              }}
-            >
+            <h2 style={{ color: '#ffffff', fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
               Generation Progress
             </h2>
             <button
               onClick={onClose}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#ffffff',
-                fontSize: '1.5rem',
-                cursor: 'pointer',
-              }}
+              style={{ background: 'transparent', border: 'none', color: '#ffffff', fontSize: '1.5rem', cursor: 'pointer' }}
             >
               X
             </button>
           </div>
-          <p style={{ color: '#9ca3af', margin: '0.5rem 0 0 0' }}>
-            ID: {generationId}
-          </p>
+          <p style={{ color: '#9ca3af', margin: '0.5rem 0 0 0' }}>ID: {generationId}</p>
         </div>
 
         {/* Connection Status */}
@@ -206,22 +199,10 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
         {/* Overall Progress Bar */}
         <div style={{ marginBottom: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-            <span style={{ color: '#e0e0ff', fontSize: '0.875rem', fontWeight: '500' }}>
-              Overall Progress
-            </span>
-            <span style={{ color: '#667eea', fontSize: '0.875rem', fontWeight: 'bold' }}>
-              {Math.round(overallProgress)}%
-            </span>
+            <span style={{ color: '#e0e0ff', fontSize: '0.875rem', fontWeight: '500' }}>Overall Progress</span>
+            <span style={{ color: '#667eea', fontSize: '0.875rem', fontWeight: 'bold' }}>{Math.round(overallProgress)}%</span>
           </div>
-          <div
-            style={{
-              width: '100%',
-              height: '8px',
-              background: 'rgba(102, 126, 234, 0.2)',
-              borderRadius: '4px',
-              overflow: 'hidden',
-            }}
-          >
+          <div style={{ width: '100%', height: '8px', background: 'rgba(102, 126, 234, 0.2)', borderRadius: '4px', overflow: 'hidden' }}>
             <div
               style={{
                 width: `${overallProgress}%`,
@@ -241,15 +222,13 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
               style={{
                 padding: '1rem',
                 background: 'rgba(40, 30, 65, 0.5)',
-                border: `1px solid rgba(102, 126, 234, 0.2)`,
+                border: `1px solid ${
+                  step.status === 'running'   ? 'rgba(102, 126, 234, 0.6)' :
+                  step.status === 'completed' ? 'rgba(16, 185, 129, 0.4)' :
+                  'rgba(102, 126, 234, 0.2)'
+                }`,
                 borderRadius: '8px',
                 transition: 'all 0.3s',
-                borderColor:
-                  step.status === 'running'
-                    ? 'rgba(102, 126, 234, 0.6)'
-                    : step.status === 'completed'
-                    ? 'rgba(16, 185, 129, 0.4)'
-                    : 'rgba(102, 126, 234, 0.2)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
@@ -266,36 +245,15 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
                 >
                   {getStatusIcon(step.status)}
                 </span>
-                <span
-                  style={{
-                    color: '#ffffff',
-                    fontSize: '1rem',
-                    fontWeight: '500',
-                    flex: 1,
-                  }}
-                >
+                <span style={{ color: '#ffffff', fontSize: '1rem', fontWeight: '500', flex: 1 }}>
                   {step.name}
                 </span>
-                <span
-                  style={{
-                    color: getStatusColor(step.status),
-                    fontSize: '0.75rem',
-                    fontWeight: '600',
-                    textTransform: 'uppercase',
-                  }}
-                >
+                <span style={{ color: getStatusColor(step.status), fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
                   {step.status}
                 </span>
               </div>
               {step.message && (
-                <p
-                  style={{
-                    color: '#9ca3af',
-                    fontSize: '0.875rem',
-                    margin: '0.5rem 0 0 2.5rem',
-                    fontStyle: 'italic',
-                  }}
-                >
+                <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.5rem 0 0 2.5rem', fontStyle: 'italic' }}>
                   {step.message}
                 </p>
               )}
