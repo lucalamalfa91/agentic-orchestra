@@ -1,4 +1,4 @@
-const API = "http://localhost:9000/api";
+const API = "http://localhost:8000/api";
 
 export async function getGitHubAuthUrl() {
   const res = await fetch(`${API}/auth/github/login`);

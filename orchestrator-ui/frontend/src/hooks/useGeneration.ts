@@ -46,7 +46,7 @@ export function useGeneration() {
 
     try {
       // Step 1: Send generation request
-      const res = await fetch('http://localhost:9000/api/generation/start', {
+      const res = await fetch('http://localhost:8000/api/generation/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,7 +71,7 @@ export function useGeneration() {
       setActiveGenerationId(json.generation_id);
 
       // Step 2: Connect WebSocket for progress updates
-      const ws = new WebSocket(`ws://localhost:9000/ws/generation/${json.generation_id}`);
+      const ws = new WebSocket(`ws://localhost:8000/ws/generation/${json.generation_id}`);
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);

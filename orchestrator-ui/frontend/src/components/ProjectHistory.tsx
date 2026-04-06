@@ -62,7 +62,7 @@ const ProjectHistory: React.FC<ProjectHistoryProps> = ({ onEdit, refreshTrigger 
   const handleStopGeneration = async (projectId: string) => {
     if (window.confirm('Stop generation for this project?')) {
       try {
-        await fetch(`http://localhost:9000/api/generation/${projectId}/cancel`, {
+        await fetch(`http://localhost:8000/api/generation/${projectId}/cancel`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('jwt_token')}`,

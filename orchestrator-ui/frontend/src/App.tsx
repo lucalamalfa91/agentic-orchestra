@@ -103,12 +103,12 @@ function AutoAuthWrapper() {
     setAttemptedAutoAuth(true);
     try {
       // Check if gh CLI is authenticated
-      const checkResponse = await fetch('http://localhost:9000/api/auth/github/check-gh');
+      const checkResponse = await fetch('http://localhost:8000/api/auth/github/check-gh');
       const checkData = await checkResponse.json();
 
       if (checkData.authenticated) {
         // gh CLI is authenticated, login directly
-        const loginResponse = await fetch('http://localhost:9000/api/auth/github/login-with-gh');
+        const loginResponse = await fetch('http://localhost:8000/api/auth/github/login-with-gh');
         if (loginResponse.ok) {
           const { token: jwt_token } = await loginResponse.json();
           setToken(jwt_token);
