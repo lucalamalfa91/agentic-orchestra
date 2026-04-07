@@ -5,9 +5,6 @@ import re
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load .env from repo root as fallback.
-# load_dotenv does NOT overwrite variables already present in the environment,
-# so values injected by the orchestrator always take precedence.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env", override=False)
 
@@ -16,11 +13,6 @@ APP_GEN_DIR = BASE_DIR / "generated_app"
 
 
 def strip_markdown_fences(text: str) -> str:
-    """
-    If the response is wrapped in ```lang ... ```, extract only the code.
-    If multiple blocks exist, take the first.
-    If no fence is found, return the text as-is.
-    """
     m = re.search(r"```[a-zA-Z0-9_+-]*\s*\n(.*?)```", text, flags=re.DOTALL)
     if m:
         return m.group(1).strip()
@@ -28,9 +20,17 @@ def strip_markdown_fences(text: str) -> str:
 
 
 def call_ai(user_content, system_content="", max_tokens=4000):
-    # Read at call-time so values injected by the orchestrator are always used.
     base_url = os.getenv("ADESSO_BASE_URL")
     api_key  = os.getenv("ADESSO_AI_HUB_KEY")
+
+    # ── diagnostic block (remove once auth works) ──────────────────────
+    masked_key = (
+        f"{api_key[:6]}...{api_key[-4:]}" if api_key and len(api_key) > 10
+        else repr(api_key)
+    )
+    print(f"[AI_UTILS] ADESSO_BASE_URL  = {base_url!r}")
+    print(f"[AI_UTILS] ADESSO_AI_HUB_KEY= {masked_key}  (len={len(api_key) if api_key else 0})")
+    # ───────────────────────────────────────────────────────────────────
 
     if not base_url:
         raise ValueError(
@@ -62,15 +62,17 @@ def call_ai(user_content, system_content="", max_tokens=4000):
         json=payload,
         timeout=60,
     )
+
+    # ── print full error body before raising ───────────────────────────
+    if not resp.ok:
+        print(f"[AI_UTILS] HTTP {resp.status_code} — response body: {resp.text[:500]}")
+    # ───────────────────────────────────────────────────────────────────
+
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
 
 def write_utf8(relative_path, text):
-    """
-    relative_path is relative to generated_app/, e.g. 'design.yaml',
-    'backend/Program.cs', 'docs/architecture.md', etc.
-    """
     target = APP_GEN_DIR / relative_path
     target.parent.mkdir(parents=True, exist_ok=True)
     data = text.encode("utf-8", errors="ignore")
@@ -86,12 +88,7 @@ def read_utf8(relative_path):
 
 
 def write_readme():
-    """
-    Generates a Markdown document explaining the purpose and design
-    of the AI Factory repository (not the generated app).
-    """
     print("=== README.md - Repo docs ===")
-
     docs_dir = BASE_DIR
     docs_dir.mkdir(parents=True, exist_ok=True)
     target = BASE_DIR / "README.md"
@@ -121,29 +118,14 @@ def write_readme():
 
     Suggested structure:
     # AI Factory Repository Overview
-
     ## Objective
-    (why this repo exists)
-
     ## AI Factory Concept
-    (describe the general concept: pipeline of collaborating agents)
-
     ## Main Repository Components
-    (explain AI_agents/, run_all_agents.py, generated_app/)
-
     ## Execution Flow
-    (textual, no diagram needed, just clear description of steps)
-
     ## Possible Extensions
-    (how to add new agents or adapt the flow)
-
     ## When to Use and When Not to Use
-    (ideal use context, what it is NOT)
 
-    Use clean Markdown (headings, paragraphs, lists), no code blocks
-    with language indicators. No source code examples, only text.
-
-    CRITICAL: Write EVERYTHING in English - all text, headings, descriptions.
+    Use clean Markdown, no code blocks. Write EVERYTHING in English.
     """
 
     raw_doc = call_ai(
@@ -157,5 +139,4 @@ def write_readme():
     text = raw_doc.encode("utf-8", errors="ignore")
     with open(target, "wb") as f:
         f.write(text)
-
     print(f"OK Written {target}")
