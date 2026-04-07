@@ -70,8 +70,6 @@ export function useGeneration() {
       }
 
       const json = await res.json();
-      // json.websocket_url = ws://localhost:8000/ws/generation/<id>
-      // Prefer the URL from the backend; fall back to WS_BASE derivation.
       const wsUrl: string = json.websocket_url || `${WS_BASE}/ws/generation/${json.generation_id}`;
 
       console.log('[WS] Connecting to:', wsUrl);
@@ -79,7 +77,6 @@ export function useGeneration() {
       setState(prev => ({ ...prev, generationId: json.generation_id }));
       setActiveGenerationId(json.generation_id);
 
-      // Close any stale socket
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -128,6 +125,7 @@ export function useGeneration() {
 
           // Error from backend
           if (msg.step === 'error') {
+            console.error('[WS] backend error:', msg.message);
             setState(prev => ({
               ...prev,
               error: msg.message || 'Generation failed',
@@ -138,22 +136,50 @@ export function useGeneration() {
             wsRef.current = null;
           }
         } catch (e) {
-          console.error('[WS] parse error:', e);
+          console.error('[WS] parse error:', e, '| raw data:', event.data);
         }
       };
 
-      ws.onerror = () => {
-        console.error('[WS] error');
+      ws.onerror = (event: Event) => {
+        // The WebSocket API gives very little detail in onerror by design
+        // (browsers hide it for security). What we CAN log:
+        // - event.type (always 'error')
+        // - ws.readyState: 0=CONNECTING 1=OPEN 2=CLOSING 3=CLOSED
+        // - ws.url: the URL we tried
+        // The real cause will appear in onclose.code (see below).
+        console.error(
+          '[WS] onerror — type:', event.type,
+          '| readyState:', ws.readyState,
+          '| url:', ws.url,
+          '| (real cause is in onclose.code)'
+        );
         setState(prev => ({
           ...prev,
-          error: 'WebSocket connection error',
+          error: 'WebSocket connection error — check backend console for details',
           isGenerating: false,
           wsConnected: false,
         }));
       };
 
-      ws.onclose = () => {
-        console.log('[WS] closed');
+      ws.onclose = (event: CloseEvent) => {
+        // Close codes: 1000=normal, 1001=going away, 1006=abnormal (server crash/unreachable)
+        // 1006 with no reason = backend closed the socket without a proper close frame,
+        // usually means the Python process crashed or the ASGI handler threw.
+        const abnormal = event.code !== 1000 && event.code !== 1001;
+        const logFn = abnormal ? console.error : console.log;
+        logFn(
+          '[WS] closed — code:', event.code,
+          '| reason:', event.reason || '(none)',
+          '| wasClean:', event.wasClean
+        );
+        if (event.code === 1006) {
+          console.error(
+            '[WS] code 1006 = abnormal close. Likely causes:',
+            '(1) backend crashed mid-generation (check [STDERR] in Python console)',
+            '(2) backend was restarted while WS was open',
+            '(3) CORS/proxy blocked the WS upgrade'
+          );
+        }
         setState(prev => ({ ...prev, wsConnected: false, isGenerating: false }));
         wsRef.current = null;
       };

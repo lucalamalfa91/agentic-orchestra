@@ -26,12 +26,12 @@ class GenerationOrchestrator:
     """
 
     STEP_MARKERS = {
-        "README update completed": {"step": "readme", "step_number": 1, "percentage": 16},
-        "Design completed": {"step": "design", "step_number": 2, "percentage": 33},
-        "Backend completed": {"step": "backend", "step_number": 3, "percentage": 50},
-        "Frontend completed": {"step": "frontend", "step_number": 4, "percentage": 67},
-        "DevOps completed": {"step": "devops", "step_number": 5, "percentage": 83},
-        "Publish completed": {"step": "publish", "step_number": 6, "percentage": 100},
+        "README update completed": {"step": "readme",   "step_number": 1, "percentage": 16},
+        "Design completed":        {"step": "design",   "step_number": 2, "percentage": 33},
+        "Backend completed":       {"step": "backend",  "step_number": 3, "percentage": 50},
+        "Frontend completed":      {"step": "frontend", "step_number": 4, "percentage": 67},
+        "DevOps completed":        {"step": "devops",   "step_number": 5, "percentage": 83},
+        "Publish completed":       {"step": "publish",  "step_number": 6, "percentage": 100},
     }
 
     def __init__(self, project_root: Path = None):
@@ -42,18 +42,7 @@ class GenerationOrchestrator:
         self.requirements_file = self.pipeline_data_dir / "requirements.txt"
 
     def _build_subprocess_env(self, db: Session, user_id: int) -> dict:
-        """
-        Build the environment dict to pass to the subprocess.
-
-        Reads the active AI Configuration from DB, decrypts the API key,
-        and returns a copy of the current process env with the AI provider
-        variables injected so that AI_agents/ai_utils.py can call the AI.
-
-        Also injects GITHUB_TOKEN from the user record for the publish agent.
-        Falls back to current process env if no config is found.
-        """
         env = os.environ.copy()
-
         try:
             try:
                 from orchestrator_ui.backend.models import Configuration, User
@@ -80,7 +69,6 @@ class GenerationOrchestrator:
 
         except Exception as e:
             print(f"[WARN] Could not inject AI config into subprocess env: {e}")
-            print("[WARN] Subprocess will rely on .env values")
 
         return env
 
@@ -125,6 +113,23 @@ class GenerationOrchestrator:
             "message": message
         })
 
+    async def _stream_stderr(self, process, generation_id: str) -> str:
+        """
+        Drain stderr line-by-line while the process runs.
+        Logs every line immediately so errors appear in the backend console
+        without waiting for the process to exit.
+        Returns the full accumulated stderr string.
+        """
+        lines = []
+        while True:
+            line = await process.stderr.readline()
+            if not line:
+                break
+            text = line.decode("utf-8").rstrip()
+            print(f"[STDERR] {text}")
+            lines.append(text)
+        return "\n".join(lines)
+
     async def run_generation(
         self,
         generation_id: str,
@@ -132,15 +137,6 @@ class GenerationOrchestrator:
         db: Session,
         user_id: int = None
     ) -> Optional[int]:
-        """
-        Run the full generation process.
-
-        Args:
-            generation_id: Unique generation ID for WebSocket tracking
-            request: Generation request with requirements
-            db: Database session
-            user_id: ID of the requesting user (used to fetch AI config from DB)
-        """
         project = None
 
         try:
@@ -180,14 +176,12 @@ class GenerationOrchestrator:
                 message="Starting app generation..."
             )
 
-            # Build env: inject AI config + GitHub token from DB into subprocess
             subprocess_env = (
                 self._build_subprocess_env(db, user_id)
                 if user_id is not None
                 else os.environ.copy()
             )
 
-            # Use sys.executable so the same virtualenv is used
             process = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "run_all_agents.py",
@@ -197,33 +191,54 @@ class GenerationOrchestrator:
                 env=subprocess_env
             )
 
+            # Stream stdout (progress) and stderr (errors) concurrently
+            # so neither pipe blocks the other.
             current_step = "start"
-            while True:
-                line = await process.stdout.readline()
-                if not line:
-                    break
-                line_text = line.decode("utf-8").strip()
-                print(f"[STDOUT] {line_text}")
+            stderr_lines: list[str] = []
 
-                for marker, step_info in self.STEP_MARKERS.items():
-                    if marker in line_text:
-                        current_step = step_info["step"]
-                        crud.create_generation_log(
-                            db=db,
-                            project_id=project.id,
-                            step_name=current_step,
-                            status="completed",
-                            message=f"{current_step.capitalize()} step completed"
-                        )
-                        await self.broadcast_progress(
-                            generation_id=generation_id,
-                            step=current_step,
-                            step_number=step_info["step_number"],
-                            percentage=step_info["percentage"],
-                            message=f"{current_step.capitalize()} generation completed"
-                        )
+            async def read_stdout():
+                nonlocal current_step
+                while True:
+                    line = await process.stdout.readline()
+                    if not line:
+                        break
+                    line_text = line.decode("utf-8").strip()
+                    print(f"[STDOUT] {line_text}")
+                    for marker, step_info in self.STEP_MARKERS.items():
+                        if marker in line_text:
+                            current_step = step_info["step"]
+                            crud.create_generation_log(
+                                db=db,
+                                project_id=project.id,
+                                step_name=current_step,
+                                status="completed",
+                                message=f"{current_step.capitalize()} step completed"
+                            )
+                            await self.broadcast_progress(
+                                generation_id=generation_id,
+                                step=current_step,
+                                step_number=step_info["step_number"],
+                                percentage=step_info["percentage"],
+                                message=f"{current_step.capitalize()} generation completed"
+                            )
 
-            await process.wait()
+            async def read_stderr():
+                while True:
+                    line = await process.stderr.readline()
+                    if not line:
+                        break
+                    text = line.decode("utf-8").rstrip()
+                    print(f"[STDERR] {text}")
+                    stderr_lines.append(text)
+
+            # Run both readers and wait for the process simultaneously
+            await asyncio.gather(
+                read_stdout(),
+                read_stderr(),
+                process.wait()
+            )
+
+            stderr_full = "\n".join(stderr_lines)
 
             if process.returncode == 0:
                 crud.update_project_status(db, project.id, "completed")
@@ -236,28 +251,32 @@ class GenerationOrchestrator:
                 )
                 return project.id
             else:
-                stderr = await process.stderr.read()
-                error_message = stderr.decode("utf-8")
-                print(f"[ERROR] Generation failed:\n{error_message}")
+                error_summary = (
+                    stderr_full[-1000:] if stderr_full
+                    else f"Process exited with code {process.returncode} (no stderr)"
+                )
+                print(f"[ERROR] Generation failed (rc={process.returncode}):\n{error_summary}")
                 crud.update_project_status(db, project.id, "failed")
                 crud.create_generation_log(
                     db=db,
                     project_id=project.id,
                     step_name=current_step,
                     status="failed",
-                    message=f"Generation failed: {error_message[:500]}"
+                    message=f"rc={process.returncode}: {error_summary[:500]}"
                 )
                 await self.broadcast_progress(
                     generation_id=generation_id,
                     step="error",
                     step_number=0,
                     percentage=0,
-                    message=f"Generation failed: {error_message[:200]}"
+                    message=f"[rc={process.returncode}] {error_summary[:400]}"
                 )
                 return None
 
         except Exception as e:
-            print(f"[ERROR] Exception during generation: {e}")
+            import traceback
+            tb = traceback.format_exc()
+            print(f"[ERROR] Exception during generation:\n{tb}")
             if project:
                 crud.update_project_status(db, project.id, "failed")
                 crud.create_generation_log(
@@ -265,14 +284,14 @@ class GenerationOrchestrator:
                     project_id=project.id,
                     step_name="error",
                     status="failed",
-                    message=str(e)
+                    message=tb[:500]
                 )
             await self.broadcast_progress(
                 generation_id=generation_id,
                 step="error",
                 step_number=0,
                 percentage=0,
-                message=f"Error: {str(e)}"
+                message=f"Exception: {str(e)}"
             )
             return None
 
