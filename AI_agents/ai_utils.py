@@ -5,51 +5,71 @@ import re
 from pathlib import Path
 from dotenv import load_dotenv
 
-# carica .env dalla root (app-factory)
+# Load .env from repo root as fallback.
+# load_dotenv does NOT overwrite variables already present in the environment,
+# so values injected by the orchestrator always take precedence.
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env", override=False)
 
-BASE_URL = os.getenv("ADESSO_BASE_URL")
-API_KEY = os.getenv("ADESSO_AI_HUB_KEY")
 MODEL = "claude-haiku-4-5"
+APP_GEN_DIR = BASE_DIR / "generated_app"
 
-APP_GEN_DIR = BASE_DIR / "generated_app" 
 
 def strip_markdown_fences(text: str) -> str:
     """
-    Se la risposta è dentro ```lang ... ```, estrae solo il codice.
-    Se ci sono più blocchi, prende il primo.
-    Se non trova fence, restituisce il testo così com'è.
+    If the response is wrapped in ```lang ... ```, extract only the code.
+    If multiple blocks exist, take the first.
+    If no fence is found, return the text as-is.
     """
-    # match ```lang\n...code...\n``` (non greedy)
     m = re.search(r"```[a-zA-Z0-9_+-]*\s*\n(.*?)```", text, flags=re.DOTALL)
     if m:
         return m.group(1).strip()
-    # fallback: rimuovi eventuali ``` sparsi
     return re.sub(r"```", "", text).strip()
 
+
 def call_ai(user_content, system_content="", max_tokens=4000):
+    # Read at call-time so values injected by the orchestrator are always used.
+    base_url = os.getenv("ADESSO_BASE_URL")
+    api_key  = os.getenv("ADESSO_AI_HUB_KEY")
+
+    if not base_url:
+        raise ValueError(
+            "ADESSO_BASE_URL is not set. "
+            "Configure it in the UI (AI Configuration) or add it to .env"
+        )
+    if not api_key:
+        raise ValueError(
+            "ADESSO_AI_HUB_KEY is not set. "
+            "Configure it in the UI (AI Configuration) or add it to .env"
+        )
+
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
         "model": MODEL,
         "messages": [
             {"role": "system", "content": system_content},
-            {"role": "user", "content": user_content},
+            {"role": "user",   "content": user_content},
         ],
         "max_tokens": max_tokens,
         "temperature": 0.1,
     }
-    resp = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=payload, timeout=60)
+    resp = requests.post(
+        f"{base_url}/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=60,
+    )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
+
 def write_utf8(relative_path, text):
     """
-    relative_path è relativo a generated_app/, es: 'design.yaml',
-    'backend/Program.cs', 'docs/architecture.md', ecc.
+    relative_path is relative to generated_app/, e.g. 'design.yaml',
+    'backend/Program.cs', 'docs/architecture.md', etc.
     """
     target = APP_GEN_DIR / relative_path
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -58,10 +78,12 @@ def write_utf8(relative_path, text):
         f.write(data)
     print(f"OK scritto {target}")
 
+
 def read_utf8(relative_path):
     target = APP_GEN_DIR / relative_path
     with open(target, "r", encoding="utf-8") as f:
         return f.read()
+
 
 def write_readme():
     """
@@ -70,7 +92,6 @@ def write_readme():
     """
     print("=== README.md - Repo docs ===")
 
-    # BASE_DIR is already defined in ai_utils as root of app-factory
     docs_dir = BASE_DIR
     docs_dir.mkdir(parents=True, exist_ok=True)
     target = BASE_DIR / "README.md"
@@ -127,10 +148,12 @@ def write_readme():
 
     raw_doc = call_ai(
         prompt,
-        system_content="You are a software architect documenting the vision and structure of an AI factory repository. Write in English only."
+        system_content=(
+            "You are a software architect documenting the vision and structure "
+            "of an AI factory repository. Write in English only."
+        ),
     )
 
-    # no strip_markdown_fences here, we want pure Markdown doc
     text = raw_doc.encode("utf-8", errors="ignore")
     with open(target, "wb") as f:
         f.write(text)
