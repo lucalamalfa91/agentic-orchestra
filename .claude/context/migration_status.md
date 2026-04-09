@@ -7,14 +7,20 @@
 - [x] Prompt 04 — Knowledge Agent (RAG generico) ✓
 - [x] Prompt 05 — MCP Servers ✓
 - [x] Prompt 06 — Backend FastAPI integration ✓
-- [ ] Prompt 07 — Agent nodes reali (design + altri)
+- [x] Prompt 07a — design_node (real implementation) ✓
+- [ ] Prompt 07b — backend_agent node
+- [ ] Prompt 07c — frontend_agent node
+- [ ] Prompt 07d — backlog_agent node
+- [ ] Prompt 07e — devops_agent node
+- [ ] Prompt 07f — publish_agent node
 - [ ] Prompt 08 — Checkpoint + human-in-the-loop
 - [ ] Prompt 09 — UI Knowledge Sources
 - [ ] Prompt 10 — Testing
 
 ## Current step
-**Prompt 06 — Backend FastAPI Integration COMPLETED**
-Working on: Integrated LangGraph orchestrator into FastAPI, added KnowledgeSourceConfig model
+**Prompt 07 — Real Agent Nodes (design_node) COMPLETED**
+Working on: Implemented design_node with structured LLM output (Pydantic)
+Next node: backend_agent
 Blocker: none
 
 ## Decisions made
@@ -146,14 +152,46 @@ Blocker: none
   - Import knowledge module
   - app.include_router(knowledge.router)
 
+### Prompt 07a — design_node (2026-04-09)
+- `AI_agents/utils/__init__.py` - Utils package initialization, exports get_llm_client
+- `AI_agents/utils/llm_client.py` - LLM client factory (3.6KB)
+  - get_llm_client(provider, config) factory function
+  - Supports "openai" and "anthropic" providers
+  - Reads API keys from env vars (injected by backend)
+  - Configurable model, temperature, max_tokens
+  - Default: temp=0.1, max_tokens=4000 for design tasks
+- `AI_agents/graph/nodes/design_node.py` - Design agent implementation (8.5KB)
+  - Pydantic schemas: DesignSchema, StackConfig, Entity, EntityField, APIEndpoint
+  - design_node(state) async function with structured LLM output
+  - Reads state["requirements"] and state["rag_context"]
+  - Uses LangChain .with_structured_output() to avoid parsing failures
+  - Retry logic: up to 2 retries with error feedback in prompt
+  - Populates: state["design_yaml"], state["api_schema"], state["db_schema"]
+  - Error handling: sets state["errors"]["design"], never raises exceptions
+  - Updates: state["current_step"], state["completed_steps"], state["agent_statuses"]
+- `AI_agents/graph/nodes/__init__.py` - UPDATED to export design_node
+- `AI_agents/graph/graph.py` - UPDATED to import and use design_node
+  - Replaced stub design() function with real design_node import
+  - graph.add_node("design", design_node) now uses real implementation
+  - Comment updated: "Real implementations: design_node (Prompt 07)"
+- `requirements-knowledge.txt` - UPDATED with LLM providers
+  - Added langchain-openai>=0.2.0
+  - Added langchain-anthropic>=0.2.0
+
 ## Next action
-Execute Prompt 07: Implement Real Agent Nodes
-- Replace stub agent nodes in AI_agents/graph/nodes/ with real implementations
-- design node: Generate design.yaml using architect_agent logic
-- backend_agent node: Generate backend code using LLM
-- frontend_agent node: Generate frontend code using LLM
-- devops_agent node: Generate CI/CD workflows
-- publish_agent node: Push to GitHub using MCP GitHub server
-- All nodes must follow async def run(state: OrchestraState) -> OrchestraState signature
-- All nodes must use get_llm_client() from AI_agents/utils/llm_client.py
-- Error handling: set state["errors"][node_name], never raise exceptions
+Execute Prompt 07b: Implement backend_agent Node
+- Create AI_agents/graph/nodes/backend_node.py
+- Generate backend code (C# + ASP.NET Core OR Python + FastAPI) based on state["design_yaml"]
+- Read state["design_yaml"], state["api_schema"], state["db_schema"]
+- Use get_llm_client() from AI_agents/utils/llm_client.py
+- Generate complete backend file structure with code
+- Populate state["backend_code"] dict {file_path: code_content}
+- Error handling: set state["errors"]["backend_agent"], never raise exceptions
+- Update graph.py to import and use backend_node
+- Update nodes/__init__.py to export backend_node
+
+**Implementation pattern** (established by design_node):
+- Use structured output where beneficial (complex schemas)
+- Retry logic: up to 2 retries with error feedback
+- Always update: current_step, completed_steps, agent_statuses
+- Never raise exceptions - return state with errors dict populated

@@ -15,13 +15,16 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
 from .state import OrchestraState, AgentStatus
+from .nodes.design_node import design_node
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Agent nodes (stubs for now - real implementation in Prompt 07)
+# Agent nodes
 # ============================================================================
+# Real implementations: design_node (Prompt 07)
+# Stubs: all others (will be implemented in subsequent Prompt 07 sessions)
 
 async def knowledge_retrieval(state: OrchestraState) -> OrchestraState:
     """Retrieve relevant documentation/examples from knowledge base (RAG)."""
@@ -33,19 +36,6 @@ async def knowledge_retrieval(state: OrchestraState) -> OrchestraState:
 
     # Stub: in Prompt 04 this will populate state["retrieved_docs"]
     logger.info("[knowledge_retrieval] completed (stub)")
-    return state
-
-
-async def design(state: OrchestraState) -> OrchestraState:
-    """Generate architecture design (YAML) from user requirements."""
-    logger.info("[design] running...")
-
-    state["current_step"] = "design"
-    state["completed_steps"].append("design")
-    state["agent_statuses"]["design"] = AgentStatus.COMPLETED
-
-    # Stub: in Prompt 07 this will populate state["design_yaml"]
-    logger.info("[design] completed (stub)")
     return state
 
 
@@ -201,7 +191,7 @@ def create_graph() -> StateGraph:
 
     # Add all nodes
     graph.add_node("knowledge_retrieval", knowledge_retrieval)
-    graph.add_node("design", design)
+    graph.add_node("design", design_node)
     graph.add_node("backend_agent", backend_agent)
     graph.add_node("frontend_agent", frontend_agent)
     graph.add_node("backlog_agent", backlog_agent)
