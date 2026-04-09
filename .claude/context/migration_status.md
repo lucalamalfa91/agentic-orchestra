@@ -8,8 +8,10 @@
 - [x] Prompt 05 — MCP Servers ✓
 - [x] Prompt 06 — Backend FastAPI integration ✓
 - [x] Prompt 07a — design_node (real implementation) ✓
-- [ ] Prompt 07b — backend_agent node
-- [ ] Prompt 07c — frontend_agent node
+- [x] Prompt 07b — BaseAgent abstraction ✓
+- [ ] Prompt 07c — DeepAgents integration
+- [ ] Prompt 07d — backend_agent node (using BaseAgent)
+- [ ] Prompt 07e — frontend_agent node (using BaseAgent)
 - [ ] Prompt 07d — backlog_agent node
 - [ ] Prompt 07e — devops_agent node
 - [ ] Prompt 07f — publish_agent node
@@ -18,9 +20,9 @@
 - [ ] Prompt 10 — Testing
 
 ## Current step
-**Prompt 07 — Real Agent Nodes (design_node) COMPLETED**
-Working on: Implemented design_node with structured LLM output (Pydantic)
-Next node: backend_agent
+**Prompt 07b — BaseAgent Abstraction COMPLETED**
+Working on: Created shared BaseAgent abstraction for all agent nodes
+Next: Prompt 07c — DeepAgents integration
 Blocker: none
 
 ## Decisions made
@@ -47,6 +49,10 @@ Blocker: none
 - **WebSocket format preservation**: Map LangGraph events to legacy STEP_MARKERS for frontend compatibility
 - **Knowledge sources encryption**: All config_json encrypted before DB storage using encryption_service
 - **Background indexing**: FastAPI BackgroundTasks for async knowledge source indexing
+- **BaseAgent abstraction**: Shared foundation for all agent nodes (Prompt 07b)
+- **Agent DRY pattern**: Agents implement only system_prompt(), build_input(), parse_output()
+- **Centralized retry logic**: MAX_RETRIES=2 in BaseAgent.run(), automatic error handling
+- **Consistent state updates**: BaseAgent auto-updates current_step, completed_steps, agent_statuses
 
 ## Files created by this migration
 ### Prompt 02 (2026-04-08)
@@ -178,20 +184,32 @@ Blocker: none
   - Added langchain-openai>=0.2.0
   - Added langchain-anthropic>=0.2.0
 
-## Next action
-Execute Prompt 07b: Implement backend_agent Node
-- Create AI_agents/graph/nodes/backend_node.py
-- Generate backend code (C# + ASP.NET Core OR Python + FastAPI) based on state["design_yaml"]
-- Read state["design_yaml"], state["api_schema"], state["db_schema"]
-- Use get_llm_client() from AI_agents/utils/llm_client.py
-- Generate complete backend file structure with code
-- Populate state["backend_code"] dict {file_path: code_content}
-- Error handling: set state["errors"]["backend_agent"], never raise exceptions
-- Update graph.py to import and use backend_node
-- Update nodes/__init__.py to export backend_node
+### Prompt 07b — BaseAgent Abstraction (2026-04-09)
+- `AI_agents/base_agent.py` - Abstract base class for all agent nodes (7.8KB)
+  - BaseAgent abstract class with MAX_RETRIES = 2, agent_name attribute
+  - `_build_chain()`: constructs LangChain LCEL chain (prompt | llm | parser)
+  - Abstract methods: `system_prompt()`, `build_input()`, `parse_output()`
+  - `run()`: main execution method with retry logic and error handling
+  - Centralizes: LLM initialization, prompt rendering, retries, logging, state updates
+  - Error handling: catches all exceptions, sets state["errors"], never raises
+  - Updates: current_step, completed_steps, agent_statuses automatically
+  - Comprehensive docstrings explaining design pattern and benefits
+- `AI_agents/base_agent_test_demo.py` - Validation demo script (3.8KB)
+  - EchoAgent: minimal concrete BaseAgent subclass
+  - main(): runs EchoAgent with fake OrchestraState
+  - Validates: imports work, LLM client initializes, retry logic functions
+  - Checks: state updates (agent_statuses, completed_steps, errors)
+  - NOT a pytest test — standalone script for quick validation
+  - Includes instructions for deletion after validation
 
-**Implementation pattern** (established by design_node):
-- Use structured output where beneficial (complex schemas)
-- Retry logic: up to 2 retries with error feedback
-- Always update: current_step, completed_steps, agent_statuses
-- Never raise exceptions - return state with errors dict populated
+## Next action
+Execute Prompt 07c: DeepAgents Integration
+- Integrate with DeepAgents framework for advanced agent capabilities
+- Details to be determined from prompt_07c_deepagents_integration.md
+
+**BaseAgent pattern** (established by Prompt 07b):
+- All new agent nodes should extend BaseAgent
+- Implement only: system_prompt(), build_input(), parse_output()
+- BaseAgent handles: LLM init, retries (MAX_RETRIES=2), logging, state updates
+- Error handling: BaseAgent catches exceptions, sets state["errors"], never raises
+- Automatic state updates: current_step, completed_steps, agent_statuses
