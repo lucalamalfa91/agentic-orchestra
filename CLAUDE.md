@@ -66,7 +66,21 @@ orchestrator-ui/backend/api/            -> FastAPI routers
 
 ---
 
-## Session management rule (mandatory)
+## Session management rules (mandatory)
+
+### For sequential tasks (e.g., Prompt 02 → 03 → 04 → 05...)
+When working through sequential prompts/tasks that are being tracked:
+1. Complete the current prompt/task fully
+2. Update `.claude/context/migration_status.md` marking the task as complete
+3. Commit changes with clear commit message
+4. Push to remote if requested
+5. Tell user: "Prompt X completed and committed. Run /clear before proceeding to Prompt Y."
+6. WAIT for user to run `/clear` before starting next sequential task
+
+**Why**: Sequential tasks build on each other but don't need shared context.
+Starting each with clean context prevents context bloat and keeps sessions focused.
+
+### For non-sequential tasks (ad-hoc work, debugging, exploration)
 Monitor context usage continuously during the session.
 
 When context usage reaches ~75%:
