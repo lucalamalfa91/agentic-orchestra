@@ -1,14 +1,23 @@
 """
 SQLAlchemy ORM models for Orchestrator UI.
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+import enum
+import uuid
 
 try:
     from orchestrator_ui.backend.database import Base
 except ModuleNotFoundError:
     from database import Base
+
+
+class SourceType(str, enum.Enum):
+    """Enum for knowledge source types."""
+    WEB = "web"
+    FILE = "file"
+    API = "api"
 
 
 class Project(Base):
@@ -91,6 +100,7 @@ class User(Base):
     # Relationships
     configurations = relationship("Configuration", back_populates="user", cascade="all, delete-orphan")
     deploy_providers = relationship("DeployProviderAuth", back_populates="user", cascade="all, delete-orphan")
+    knowledge_sources = relationship("KnowledgeSourceConfig", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User(id={self.id}, github_username='{self.github_username}')>"
@@ -135,3 +145,25 @@ class DeployProviderAuth(Base):
 
     def __repr__(self):
         return f"<DeployProviderAuth(id={self.id}, user_id={self.user_id}, provider='{self.provider_name}')>"
+
+
+class KnowledgeSourceConfig(Base):
+    """
+    Stores user-configured knowledge sources for RAG system.
+    Each source (web, file, or API) is indexed into the vector store.
+    """
+    __tablename__ = "knowledge_source_configs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    source_type = Column(Enum(SourceType), nullable=False)
+    config_json = Column(Text, nullable=False)  # Encrypted JSON configuration
+    last_indexed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="knowledge_sources")
+
+    def __repr__(self):
+        return f"<KnowledgeSourceConfig(id='{self.id}', user_id={self.user_id}, name='{self.name}', type='{self.source_type.value}')>"

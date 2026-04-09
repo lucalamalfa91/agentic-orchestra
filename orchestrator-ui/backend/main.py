@@ -14,11 +14,11 @@ load_dotenv(env_path)
 try:
     from orchestrator_ui.backend.database import init_db
     from orchestrator_ui.backend.websocket import manager
-    from orchestrator_ui.backend.api import projects, generation, auth, config
+    from orchestrator_ui.backend.api import projects, generation, auth, config, knowledge
 except ModuleNotFoundError:
     import database
     import websocket as ws_module
-    from api import projects, generation, auth, config
+    from api import projects, generation, auth, config, knowledge
     init_db = database.init_db
     manager = ws_module.manager
 
@@ -61,6 +61,7 @@ app.include_router(projects.router)
 app.include_router(generation.router)
 app.include_router(auth.router)
 app.include_router(config.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/")

@@ -6,15 +6,15 @@
 - [x] Prompt 03 — LangGraph graph + parallelismo ✓
 - [x] Prompt 04 — Knowledge Agent (RAG generico) ✓
 - [x] Prompt 05 — MCP Servers ✓
-- [ ] Prompt 06 — Backend FastAPI integration
+- [x] Prompt 06 — Backend FastAPI integration ✓
 - [ ] Prompt 07 — Agent nodes reali (design + altri)
 - [ ] Prompt 08 — Checkpoint + human-in-the-loop
 - [ ] Prompt 09 — UI Knowledge Sources
 - [ ] Prompt 10 — Testing
 
 ## Current step
-**Prompt 05 — MCP Servers COMPLETED**
-Working on: Created MCP server layer for GitHub, Azure DevOps, and deployment tools
+**Prompt 06 — Backend FastAPI Integration COMPLETED**
+Working on: Integrated LangGraph orchestrator into FastAPI, added KnowledgeSourceConfig model
 Blocker: none
 
 ## Decisions made
@@ -36,6 +36,11 @@ Blocker: none
 - **Token injection**: Backend decrypts user tokens from DB, injects as env vars before server start
 - **Structured logging**: All tool calls logged with name, args, duration, status
 - **Standardized responses**: success/error format across all MCP servers
+- **Alembic migrations**: Initialized for database schema versioning, first migration for KnowledgeSourceConfig
+- **LangGraph integration**: Orchestrator.py refactored from subprocess to direct LangGraph streaming
+- **WebSocket format preservation**: Map LangGraph events to legacy STEP_MARKERS for frontend compatibility
+- **Knowledge sources encryption**: All config_json encrypted before DB storage using encryption_service
+- **Background indexing**: FastAPI BackgroundTasks for async knowledge source indexing
 
 ## Files created by this migration
 ### Prompt 02 (2026-04-08)
@@ -106,9 +111,49 @@ Blocker: none
   - Testing examples, error handling patterns
 - `test_mcp_imports.py` - Import verification test
 
+### Prompt 06 (2026-04-09)
+- `orchestrator-ui/backend/models.py` - Added KnowledgeSourceConfig model + SourceType enum
+  - UUID primary key, user_id FK, name, source_type (web/file/api)
+  - Encrypted config_json field, last_indexed_at timestamp
+  - Relationship to User model
+- `orchestrator-ui/backend/alembic/` - Alembic migration system initialized
+  - `alembic.ini` - Configuration file
+  - `alembic/env.py` - Environment setup, imports Base and models, overrides DATABASE_URL
+  - `alembic/versions/29ffc17e697b_add_knowledge_source_config.py` - Initial migration
+- `orchestrator-ui/backend/crud.py` - Added knowledge source CRUD functions (6 functions)
+  - create_knowledge_source(), get_knowledge_sources(), get_knowledge_source()
+  - delete_knowledge_source(), update_last_indexed()
+  - All operations include user_id ownership verification
+- `orchestrator-ui/backend/schemas.py` - Added Pydantic schemas for knowledge sources
+  - KnowledgeSourceCreate (request schema with config dict)
+  - KnowledgeSourceResponse (response schema with datetime serialization)
+  - IndexingStatusResponse (status polling response)
+- `orchestrator-ui/backend/api/knowledge.py` - New API router (8KB, 5 endpoints)
+  - GET /api/knowledge/sources - list user's sources
+  - POST /api/knowledge/sources - create source (encrypts config)
+  - DELETE /api/knowledge/sources/{id} - delete source
+  - POST /api/knowledge/index/{id} - trigger background indexing
+  - GET /api/knowledge/index/{id}/status - poll indexing status
+  - perform_indexing() background task using KnowledgeSource classes
+- `orchestrator-ui/backend/orchestrator.py` - REFACTORED from subprocess to LangGraph (10KB)
+  - Removed subprocess/threading approach
+  - Added _inject_env_vars() for token/config injection
+  - Added _build_initial_state() to construct OrchestraState
+  - Added _map_event_to_step_info() to preserve STEP_MARKERS format
+  - run_generation() now streams LangGraph events via app.astream()
+  - AGENT_TO_STEP mapping preserves exact WebSocket message format
+- `orchestrator-ui/backend/main.py` - Registered knowledge router
+  - Import knowledge module
+  - app.include_router(knowledge.router)
+
 ## Next action
-Execute Prompt 06: Backend FastAPI Integration
-- Initialize VectorStoreService at FastAPI startup
-- Inject user tokens as env vars before starting MCP servers
-- Wire LangGraph app with FastAPI orchestrator endpoint
-- Load knowledge sources configuration from DB
+Execute Prompt 07: Implement Real Agent Nodes
+- Replace stub agent nodes in AI_agents/graph/nodes/ with real implementations
+- design node: Generate design.yaml using architect_agent logic
+- backend_agent node: Generate backend code using LLM
+- frontend_agent node: Generate frontend code using LLM
+- devops_agent node: Generate CI/CD workflows
+- publish_agent node: Push to GitHub using MCP GitHub server
+- All nodes must follow async def run(state: OrchestraState) -> OrchestraState signature
+- All nodes must use get_llm_client() from AI_agents/utils/llm_client.py
+- Error handling: set state["errors"][node_name], never raise exceptions

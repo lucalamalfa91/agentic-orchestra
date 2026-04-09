@@ -145,3 +145,59 @@ class GenerationRequestSimple(BaseModel):
     mvp_description: str = Field(..., min_length=10, description="High-level description of the application")
     tech_stack: Optional[Dict] = Field(default=None, description="Optional tech stack override")
     auto_decide: bool = Field(default=True, description="Auto-decide features and tech stack")
+
+
+# ===== Knowledge Sources =====
+
+# Knowledge Source Create Request
+class KnowledgeSourceCreate(BaseModel):
+    """Request to create a new knowledge source."""
+    name: str = Field(..., min_length=1, max_length=255, description="Display name for the source")
+    source_type: str = Field(..., description="Type of source: web, file, or api")
+    config: Dict = Field(..., description="Configuration dictionary (will be encrypted)")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Company Documentation",
+                "source_type": "web",
+                "config": {
+                    "url": "https://docs.example.com",
+                    "selectors": ["article", ".content"],
+                    "max_depth": 2
+                }
+            }
+        }
+
+
+# Knowledge Source Response
+class KnowledgeSourceResponse(BaseModel):
+    """Knowledge source data for API responses."""
+    id: str
+    user_id: int
+    name: str
+    source_type: str
+    last_indexed_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+    @field_serializer('created_at', 'last_indexed_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format string."""
+        return value.isoformat() if value else None
+
+
+# Indexing Status Response
+class IndexingStatusResponse(BaseModel):
+    """Response for indexing status check."""
+    source_id: str
+    status: str  # "idle", "indexing", "completed", "failed"
+    last_indexed_at: Optional[datetime] = None
+    message: Optional[str] = None
+
+    @field_serializer('last_indexed_at')
+    def serialize_datetime(self, value: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format string."""
+        return value.isoformat() if value else None

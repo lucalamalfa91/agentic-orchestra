@@ -5,6 +5,7 @@ import json
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from pathlib import Path
+from datetime import datetime
 
 try:
     from orchestrator_ui.backend import models, schemas
@@ -332,3 +333,120 @@ def save_deploy_auth(user_id: int, provider: str, access_token: str, refresh_tok
         return auth
     finally:
         db.close()
+
+
+# ===== Knowledge Source CRUD =====
+
+def create_knowledge_source(
+    db: Session,
+    user_id: int,
+    name: str,
+    source_type: str,
+    config_json_encrypted: str
+) -> models.KnowledgeSourceConfig:
+    """
+    Create a new knowledge source configuration.
+
+    Args:
+        db: Database session
+        user_id: User ID who owns this source
+        name: Display name for the source
+        source_type: Type of source ("web", "file", "api")
+        config_json_encrypted: Encrypted JSON configuration string
+
+    Returns:
+        Created KnowledgeSourceConfig instance
+    """
+    source = models.KnowledgeSourceConfig(
+        user_id=user_id,
+        name=name,
+        source_type=source_type,
+        config_json=config_json_encrypted,
+        last_indexed_at=None
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    return source
+
+
+def get_knowledge_sources(db: Session, user_id: int) -> List[models.KnowledgeSourceConfig]:
+    """
+    Get all knowledge sources for a user.
+
+    Args:
+        db: Database session
+        user_id: User ID to filter by
+
+    Returns:
+        List of KnowledgeSourceConfig instances
+    """
+    return db.query(models.KnowledgeSourceConfig).filter(
+        models.KnowledgeSourceConfig.user_id == user_id
+    ).order_by(models.KnowledgeSourceConfig.created_at.desc()).all()
+
+
+def get_knowledge_source(
+    db: Session,
+    source_id: str,
+    user_id: int
+) -> Optional[models.KnowledgeSourceConfig]:
+    """
+    Get a specific knowledge source by ID, ensuring it belongs to the user.
+
+    Args:
+        db: Database session
+        source_id: Source ID (UUID string)
+        user_id: User ID to verify ownership
+
+    Returns:
+        KnowledgeSourceConfig instance or None if not found
+    """
+    return db.query(models.KnowledgeSourceConfig).filter(
+        models.KnowledgeSourceConfig.id == source_id,
+        models.KnowledgeSourceConfig.user_id == user_id
+    ).first()
+
+
+def delete_knowledge_source(db: Session, source_id: str, user_id: int) -> bool:
+    """
+    Delete a knowledge source, ensuring it belongs to the user.
+
+    Args:
+        db: Database session
+        source_id: Source ID (UUID string)
+        user_id: User ID to verify ownership
+
+    Returns:
+        True if deleted, False if not found
+    """
+    source = get_knowledge_source(db, source_id, user_id)
+    if source:
+        db.delete(source)
+        db.commit()
+        return True
+    return False
+
+
+def update_last_indexed(db: Session, source_id: str, timestamp: datetime) -> Optional[models.KnowledgeSourceConfig]:
+    """
+    Update the last_indexed_at timestamp for a knowledge source.
+
+    Args:
+        db: Database session
+        source_id: Source ID (UUID string)
+        timestamp: Datetime to set as last_indexed_at
+
+    Returns:
+        Updated KnowledgeSourceConfig instance or None if not found
+    """
+    source = db.query(models.KnowledgeSourceConfig).filter(
+        models.KnowledgeSourceConfig.id == source_id
+    ).first()
+
+    if source:
+        source.last_indexed_at = timestamp
+        db.commit()
+        db.refresh(source)
+
+    return source
