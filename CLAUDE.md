@@ -74,8 +74,20 @@ When working through sequential prompts/tasks that are being tracked:
 2. Update `.claude/context/migration_status.md` marking the task as complete
 3. Commit changes with clear commit message
 4. Push to remote if requested
-5. Tell user: "Prompt X completed and committed. Run /clear before proceeding to Prompt Y."
-6. WAIT for user to run `/clear` before starting next sequential task
+5. Display completion message with explicit reminder:
+
+```
+✅ Prompt X completed and committed.
+
+NEXT STEPS:
+1. You run: /clear
+2. You say: "procedi con prompt Y" (or "prosegui con l'implementazione")
+3. I start Prompt Y with clean context
+
+Ready when you are! 🚀
+```
+
+6. STOP and WAIT - do NOT continue until user starts new message after /clear
 
 **Why**: Sequential tasks build on each other but don't need shared context.
 Starting each with clean context prevents context bloat and keeps sessions focused.
