@@ -42,7 +42,7 @@ cd orchestrator-ui/backend && python init_db.py
 # 4. Start backend (Terminal 1)
 cd orchestrator-ui/backend
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+python main.py
 
 # 5. Start frontend (Terminal 2)
 cd orchestrator-ui/frontend
@@ -496,7 +496,7 @@ cd orchestrator-ui/backend
 pip install -r requirements.txt
 python init_db.py
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+python main.py
 ```
 
 **Verify:** Open http://localhost:8000/docs → Swagger UI
@@ -515,10 +515,15 @@ npm run dev
 
 **Port already in use:**
 ```bash
-# Find and kill process on port 8000
+# Option 1: Kill process on port 8000
 lsof -ti:8000 | xargs kill -9
-# Or change port in main.py
+
+# Option 2: Use different port (recommended after restart due to TIME_WAIT)
+cd orchestrator-ui/backend
+python main.py 9000  # Uses port 9000 instead
 ```
+
+**Note**: On Windows, port 8000 may remain locked after restart due to OS TIME_WAIT state. Using a different port (9000) is the recommended workaround.
 
 **GitHub OAuth error:**
 - Verify Client ID/Secret in .env
@@ -780,7 +785,8 @@ git pull origin main
 cd orchestrator-ui/backend
 pip install -r requirements.txt
 # Database tables auto-created
-python -m uvicorn main:app --reload
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
+python main.py
 
 # 3. Frontend
 cd orchestrator-ui/frontend
@@ -793,7 +799,7 @@ npm run dev
 ## Support & Help
 
 - **Backend API Docs:** http://localhost:8000/docs (Swagger UI)
-- **Backend Logs:** Check Terminal 1 running uvicorn
+- **Backend Logs:** Check Terminal 1 running main.py
 - **Frontend Logs:** Check browser DevTools console
 - **Database:** `sqlite3 database/orchestrator.db` for direct inspection
 - **Issues:** Report at https://github.com/anthropics/claude-code/issues
