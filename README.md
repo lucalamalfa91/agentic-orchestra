@@ -9,53 +9,50 @@ AI-powered system that transforms text requirements into complete applications t
 
 ### Setup
 
-⚠️ **IMPORTANT**: All commands below must be run from the **project root** (`agentic-orchestra/`), not from subdirectories.
+⚠️ **IMPORTANT**: All commands must be run from the **project root** (`agentic-orchestra/`).
 
-**Quick health check**: Run `bash check_setup.sh` to verify your setup.
-
+**Quick Setup (Recommended)**:
 ```bash
-# 0. Navigate to project root (adjust path as needed)
-cd ~/PycharmProjects/agentic-orchestra
-# OR on Windows: cd C:\Users\YourName\PycharmProjects\agentic-orchestra
+# 1. Navigate to project root
+cd C:\Users\luca.la-malfa\PycharmProjects\agentic-orchestra  # Windows
+# OR: cd ~/PycharmProjects/agentic-orchestra  # Linux/Mac
 
-# Optional: Check setup status
-bash check_setup.sh
-
-# 1. Environment
+# 2. Setup environment (first time only)
 cp .env.example .env
-# Edit .env: add GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, AI_BASE_URL, AI_API_KEY
+# Edit .env with your credentials (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, AI_BASE_URL, AI_API_KEY)
 
-# 2. Install Dependencies
+# 3. Install dependencies (first time only)
 pip install -r requirements.txt
 cd orchestrator-ui/frontend && npm install && cd ../..
 
-# 3. Backend (Terminal 1) - Open NEW terminal, navigate to project root first!
+# 4. Start Backend (Terminal 1)
+# PowerShell:
+.\start-backend.ps1
 
-# Linux/Mac:
+# Git Bash:
+bash start-backend.sh
+
+# 5. Start Frontend (Terminal 2 - NEW terminal!)
+# PowerShell:
+.\start-frontend.ps1
+
+# Git Bash:
+bash start-frontend.sh
+
+# 6. Open http://localhost:5173
+```
+
+**Manual Setup** (if scripts don't work):
+```bash
+# Backend (Terminal 1)
 cd orchestrator-ui/backend
-export PYTHONPATH="$(cd ../.. && pwd)"
+export PYTHONPATH="$(cd ../.. && pwd -W)"  # Git Bash
+# OR: $env:PYTHONPATH = (Get-Location).Parent.Parent.FullName  # PowerShell
 python main.py
 
-# Windows Git Bash:
-cd orchestrator-ui/backend
-export PYTHONPATH="$(cd ../.. && pwd -W)"  # -W gives Windows path
-python main.py
-
-# Windows (PowerShell):
-cd orchestrator-ui\backend
-$env:PYTHONPATH = (Resolve-Path ..\.. ).Path
-python main.py
-
-# Windows (CMD):
-cd orchestrator-ui\backend
-for /f %i in ('cd') do set PYTHONPATH=%i\..\..
-python main.py
-
-# 4. Frontend (Terminal 2) - Open NEW terminal, navigate to project root first!
+# Frontend (Terminal 2)
 cd orchestrator-ui/frontend
 npm run dev
-
-# 5. Open http://localhost:5173
 ```
 
 ### GitHub OAuth Setup
