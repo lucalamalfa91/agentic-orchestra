@@ -56,7 +56,8 @@ class OrchestraState(TypedDict):
     # ===== USER INPUT & METADATA =====
 
     # Producer: User input → Consumer: Requirements Agent
-    requirements: str
+    # Annotated to handle parallel agents returning full state dict
+    requirements: Annotated[str, lambda x, y: x or y]
 
     # Producer: Orchestrator → Consumer: All agents (for logging)
     project_id: str
