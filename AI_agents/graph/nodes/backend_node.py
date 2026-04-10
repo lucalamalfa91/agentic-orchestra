@@ -54,33 +54,33 @@ Your task is to generate a complete, production-ready backend codebase in the EX
 
 CRITICAL OUTPUT FORMAT:
 You must output ONLY valid JSON with this exact structure (no markdown, no extra text):
-{
-  "files": {
+{{
+  "files": {{
     "backend/[main_file]": "... complete code ...",
     "backend/[folder]/[file]": "... complete code ...",
     ...
-  }
-}
+  }}
+}}
 
 Example for Python/FastAPI:
-{
-  "files": {
+{{
+  "files": {{
     "backend/main.py": "...",
     "backend/models/user.py": "...",
     "backend/routers/users.py": "...",
     "backend/requirements.txt": "..."
-  }
-}
+  }}
+}}
 
 Example for Node.js/Express:
-{
-  "files": {
+{{
+  "files": {{
     "backend/server.js": "...",
     "backend/models/User.js": "...",
     "backend/routes/users.js": "...",
     "backend/package.json": "..."
-  }
-}
+  }}
+}}
 
 FRAMEWORK-SPECIFIC REQUIREMENTS:
 You will receive the exact framework to use in the user prompt. Follow these principles for ANY framework:
