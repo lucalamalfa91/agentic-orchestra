@@ -9,50 +9,30 @@ AI-powered system that transforms text requirements into complete applications t
 
 ### Setup
 
-⚠️ **IMPORTANT**: All commands must be run from the **project root** (`agentic-orchestra/`).
+⚠️ **IMPORTANT**: Use **Git Bash** and run all commands from the **project root** (`agentic-orchestra/`).
 
-**Quick Setup (Recommended)**:
 ```bash
 # 1. Navigate to project root
-cd C:\Users\luca.la-malfa\PycharmProjects\agentic-orchestra  # Windows
-# OR: cd ~/PycharmProjects/agentic-orchestra  # Linux/Mac
+cd ~/PycharmProjects/agentic-orchestra
 
-# 2. Setup environment (first time only)
+# 2. Check setup (optional)
+bash check_setup.sh
+
+# 3. Setup environment (first time only)
 cp .env.example .env
 # Edit .env with your credentials (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, AI_BASE_URL, AI_API_KEY)
 
-# 3. Install dependencies (first time only)
+# 4. Install dependencies (first time only)
 pip install -r requirements.txt
 cd orchestrator-ui/frontend && npm install && cd ../..
 
-# 4. Start Backend (Terminal 1)
-# PowerShell:
-.\start-backend.ps1
-
-# Git Bash:
+# 5. Start Backend (Terminal 1)
 bash start-backend.sh
 
-# 5. Start Frontend (Terminal 2 - NEW terminal!)
-# PowerShell:
-.\start-frontend.ps1
-
-# Git Bash:
+# 6. Start Frontend (Terminal 2 - NEW terminal!)
 bash start-frontend.sh
 
-# 6. Open http://localhost:5173
-```
-
-**Manual Setup** (if scripts don't work):
-```bash
-# Backend (Terminal 1)
-cd orchestrator-ui/backend
-export PYTHONPATH="$(cd ../.. && pwd -W)"  # Git Bash
-# OR: $env:PYTHONPATH = (Get-Location).Parent.Parent.FullName  # PowerShell
-python main.py
-
-# Frontend (Terminal 2)
-cd orchestrator-ui/frontend
-npm run dev
+# 7. Open http://localhost:5173
 ```
 
 ### GitHub OAuth Setup
@@ -70,44 +50,6 @@ npm run dev
 
 **Resume failed generations**: Project History → Click "▶ Resume Generation"
 
-### Quick Start (Step by Step)
-
-If you're getting errors, follow this exact sequence:
-
-```bash
-# 1. Verify you're in project root
-pwd  # Should show: .../agentic-orchestra
-ls .env.example requirements.txt  # Should list both files
-
-# 2. If not in root, navigate there first
-cd ~/PycharmProjects/agentic-orchestra  # Adjust path as needed
-
-# 3. Setup environment (if .env doesn't exist)
-cp .env.example .env
-# Edit .env with your credentials
-
-# 4. Install Python dependencies
-pip install -r requirements.txt
-
-# 5. Install frontend dependencies
-cd orchestrator-ui/frontend
-npm install
-cd ../..  # Back to root
-
-# 6. Start Backend (Terminal 1)
-cd orchestrator-ui/backend
-export PYTHONPATH="$(cd ../.. && pwd -W)"  # Git Bash on Windows
-python main.py
-# Should show: "Starting Orchestrator UI Backend..." and "Database initialized"
-
-# 7. Start Frontend (Terminal 2 - NEW terminal, start from root again!)
-cd orchestrator-ui/frontend
-npm run dev
-# Should show: "Local: http://localhost:5173"
-
-# 8. Open browser
-# Go to: http://localhost:5173
-```
 
 ### Verify Installation
 
@@ -191,33 +133,21 @@ Full API docs: http://localhost:8000/docs (Swagger UI)
 
 **ModuleNotFoundError: No module named 'orchestrator_ui' or 'AI_agents'**
 
-This means PYTHONPATH is not set correctly. Make sure you:
-1. Are starting from project root (not from `orchestrator-ui/backend`)
-2. Set PYTHONPATH before running `python main.py`
+Solution: Use the startup scripts instead of manual commands:
 
 ```bash
-# Git Bash (Windows):
-cd ~/PycharmProjects/agentic-orchestra  # Go to root first!
-cd orchestrator-ui/backend
-export PYTHONPATH="$(cd ../.. && pwd -W)"
-python main.py
-
-# Verify PYTHONPATH is set:
-echo $PYTHONPATH  # Should show full path to project root
+cd ~/PycharmProjects/agentic-orchestra
+bash start-backend.sh
 ```
+
+The script handles PYTHONPATH automatically.
 
 **Port 8000 locked**
 ```bash
-# Linux/Mac: Kill process
-lsof -ti:8000 | xargs kill -9
+# Git Bash: Kill process on port 8000
+netstat -ano | grep :8000 | awk '{print $5}' | xargs taskkill //F //PID
 
-# Windows (PowerShell): Kill process
-Get-Process -Id (Get-NetTCPConnection -LocalPort 8000).OwningProcess | Stop-Process -Force
-
-# Windows (CMD): Kill process
-for /f "tokens=5" %a in ('netstat -aon ^| find ":8000" ^| find "LISTENING"') do taskkill /F /PID %a
-
-# Alternative: Use different port (all platforms)
+# Or just use a different port
 cd orchestrator-ui/backend
 python main.py 9000
 ```
@@ -232,21 +162,14 @@ python main.py 9000
 
 **Database locked**
 ```bash
-# Linux/Mac: Kill all Python processes
-pkill -f python
+# Kill all Python processes
+taskkill //F //IM python.exe
+
+# Remove database
 rm -f database/orchestrator.db
 
-# Windows (PowerShell): Kill Python processes
-Get-Process python | Stop-Process -Force
-Remove-Item database\orchestrator.db -Force -ErrorAction SilentlyContinue
-
-# Windows (CMD): Kill Python processes
-taskkill /F /IM python.exe
-del /F database\orchestrator.db
-
 # Restart backend (database auto-initializes on startup)
-cd orchestrator-ui/backend
-python main.py
+bash start-backend.sh
 ```
 
 ---
