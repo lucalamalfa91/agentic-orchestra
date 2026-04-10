@@ -1,8 +1,7 @@
 """MCP Server for GitHub integration."""
 
-import logging
 import base64
-from typing import Optional
+import logging
 
 from github import Github, GithubException
 from mcp.server import Server
@@ -12,8 +11,7 @@ from .base_server import (
     inject_token,
     log_tool_call,
     format_error_response,
-    format_success_response,
-    MCPAuthError
+    format_success_response
 )
 
 logger = logging.getLogger(__name__)

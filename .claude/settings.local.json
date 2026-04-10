@@ -59,7 +59,8 @@
       "Bash(pip search:*)",
       "Bash(pip install:*)",
       "Bash(setup)",
-      "Bash(requirements \")"
+      "Bash(requirements \")",
+      "Bash(git merge:*)"
     ]
   }
 }
