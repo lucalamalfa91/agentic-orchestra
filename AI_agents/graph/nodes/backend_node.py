@@ -139,7 +139,13 @@ IMPORTANT: Read the user prompt carefully to understand which framework to use. 
         Formats design_yaml, api_schema, db_schema into a clear specification
         for the LLM to generate backend code.
         """
-        design = state.get("design_yaml", {})
+        design = state.get("design_yaml")
+        if design is None:
+            raise ValueError(
+                "design_yaml is None - design agent may have failed. "
+                "Check state['errors']['design'] for details."
+            )
+
         api_endpoints = state.get("api_schema", [])
         db_entities = state.get("db_schema", [])
         rag_docs = state.get("rag_context", [])

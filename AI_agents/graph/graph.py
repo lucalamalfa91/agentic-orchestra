@@ -248,10 +248,28 @@ async def get_app():
 
 
 # For backward compatibility (synchronous access)
-# WARNING: This will fail if checkpointer is not initialized
-# Use get_app() instead for proper async initialization
-graph_builder = create_graph()
-app = graph_builder.compile(checkpointer=None)  # Legacy sync version
+# WARNING: This creates the graph at import time. Use get_app() for async initialization.
+# Lazy initialization to avoid executing agent code during import
+_legacy_app = None
+
+def _get_legacy_app():
+    """Lazy getter for backward compatibility."""
+    global _legacy_app
+    if _legacy_app is None:
+        graph_builder = create_graph()
+        _legacy_app = graph_builder.compile(checkpointer=None)
+    return _legacy_app
+
+# Property-like access for backward compatibility
+class _AppProxy:
+    """Proxy object that lazily initializes the app when accessed."""
+    def __getattr__(self, name):
+        return getattr(_get_legacy_app(), name)
+
+    def __call__(self, *args, **kwargs):
+        return _get_legacy_app()(*args, **kwargs)
+
+app = _AppProxy()  # Lazy initialization - graph compiled on first access
 
 
 # ============================================================================

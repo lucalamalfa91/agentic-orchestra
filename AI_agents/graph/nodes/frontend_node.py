@@ -52,45 +52,45 @@ Your task is to generate a complete, production-ready frontend codebase in the E
 
 CRITICAL OUTPUT FORMAT:
 You must output ONLY valid JSON with this exact structure (no markdown, no extra text):
-{
-  "files": {
+{{
+  "files": {{
     "frontend/src/[main_file]": "... complete code ...",
     "frontend/src/[folder]/[file]": "... complete code ...",
     ...
-  }
-}
+  }}
+}}
 
 Example for React + TypeScript + Vite:
-{
-  "files": {
+{{
+  "files": {{
     "frontend/src/App.tsx": "...",
     "frontend/src/main.tsx": "...",
     "frontend/src/components/UserList.tsx": "...",
     "frontend/package.json": "...",
     "frontend/vite.config.ts": "..."
-  }
-}
+  }}
+}}
 
 Example for Vue 3 + Vite:
-{
-  "files": {
+{{
+  "files": {{
     "frontend/src/App.vue": "...",
     "frontend/src/main.js": "...",
     "frontend/src/components/UserList.vue": "...",
     "frontend/package.json": "...",
     "frontend/vite.config.js": "..."
-  }
-}
+  }}
+}}
 
 Example for Angular:
-{
-  "files": {
+{{
+  "files": {{
     "frontend/src/app/app.component.ts": "...",
     "frontend/src/app/components/user-list/user-list.component.ts": "...",
     "frontend/package.json": "...",
     "frontend/angular.json": "..."
-  }
-}
+  }}
+}}
 
 FRAMEWORK-SPECIFIC REQUIREMENTS:
 You will receive the exact framework to use in the user prompt. Follow these principles for ANY framework:
@@ -157,7 +157,13 @@ IMPORTANT: Read the user prompt carefully to understand which framework to use. 
         Formats design_yaml, api_schema into a clear specification
         for the LLM to generate frontend code.
         """
-        design = state.get("design_yaml", {})
+        design = state.get("design_yaml")
+        if design is None:
+            raise ValueError(
+                "design_yaml is None - design agent may have failed. "
+                "Check state['errors']['design'] for details."
+            )
+
         api_endpoints = state.get("api_schema", [])
         rag_docs = state.get("rag_context", [])
 

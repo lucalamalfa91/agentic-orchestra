@@ -4,7 +4,7 @@ import logging
 from typing import Any, Optional
 
 import httpx
-from mcp.client import Client
+from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class MCPClientManager:
 
     def __init__(self):
         """Initialize the MCP client manager."""
-        self._clients: dict[str, Client] = {}
+        self._clients: dict[str, ClientSession] = {}
         self._tools_cache: dict[str, list] = {}
 
     async def connect(self, server_name: str):
@@ -75,7 +75,7 @@ class MCPClientManager:
         logger.info(f"[MCPClient] Connecting to {server_name}...")
 
         async with stdio_client(server_params) as (read, write):
-            client = Client(read, write)
+            client = ClientSession(read, write)
             await client.initialize()
 
             self._clients[server_name] = client

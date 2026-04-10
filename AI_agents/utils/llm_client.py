@@ -61,22 +61,36 @@ def get_llm_client(provider: str, config: Dict[str, Any] = None):
                 "Run: pip install langchain-openai"
             )
 
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Support ADESSO AI Hub (OpenAI-compatible provider)
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ADESSO_AI_HUB_KEY")
+        base_url = os.getenv("ADESSO_BASE_URL")
+
         if not api_key:
             raise ValueError(
-                "OPENAI_API_KEY environment variable not set. "
+                "OPENAI_API_KEY or ADESSO_AI_HUB_KEY environment variable not set. "
                 "Backend must inject user's API key before agent execution."
             )
 
-        model = config.get("model", "gpt-4")
-        logger.info(f"[llm_client] Creating OpenAI client: {model}")
+        # Use appropriate default model based on provider
+        if base_url and "adesso" in base_url.lower():
+            # ADESSO AI Hub uses different model names
+            model = config.get("model", "gpt-4o-mini")  # ADESSO default
+            logger.info(f"[llm_client] Creating ADESSO AI Hub client: {model}")
+        else:
+            model = config.get("model", "gpt-4")
+            logger.info(f"[llm_client] Creating OpenAI client: {model}")
 
-        return ChatOpenAI(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=api_key,
-        )
+        # Create client with optional base_url
+        kwargs = {
+            "model": model,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "api_key": api_key,
+        }
+        if base_url:
+            kwargs["base_url"] = base_url
+
+        return ChatOpenAI(**kwargs)
 
     elif provider == "anthropic":
         try:
