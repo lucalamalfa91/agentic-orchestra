@@ -9,28 +9,53 @@ AI-powered system that transforms text requirements into complete applications t
 
 ### Setup
 
+⚠️ **IMPORTANT**: All commands below must be run from the **project root** (`agentic-orchestra/`), not from subdirectories.
+
+**Quick health check**: Run `bash check_setup.sh` to verify your setup.
+
 ```bash
+# 0. Navigate to project root (adjust path as needed)
+cd ~/PycharmProjects/agentic-orchestra
+# OR on Windows: cd C:\Users\YourName\PycharmProjects\agentic-orchestra
+
+# Optional: Check setup status
+bash check_setup.sh
+
 # 1. Environment
 cp .env.example .env
 # Edit .env: add GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, AI_BASE_URL, AI_API_KEY
 
-# 2. Install
+# 2. Install Dependencies
 pip install -r requirements.txt
 cd orchestrator-ui/frontend && npm install && cd ../..
 
-# 3. Database
-cd orchestrator-ui/backend && python init_db.py && cd ../..
+# 3. Backend (Terminal 1) - Open NEW terminal, navigate to project root first!
 
-# 4. Backend (Terminal 1)
+# Linux/Mac:
 cd orchestrator-ui/backend
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/../.."
+export PYTHONPATH="$(cd ../.. && pwd)"
 python main.py
 
-# 5. Frontend (Terminal 2)
+# Windows Git Bash:
+cd orchestrator-ui/backend
+export PYTHONPATH="$(cd ../.. && pwd -W)"  # -W gives Windows path
+python main.py
+
+# Windows (PowerShell):
+cd orchestrator-ui\backend
+$env:PYTHONPATH = (Resolve-Path ..\.. ).Path
+python main.py
+
+# Windows (CMD):
+cd orchestrator-ui\backend
+for /f %i in ('cd') do set PYTHONPATH=%i\..\..
+python main.py
+
+# 4. Frontend (Terminal 2) - Open NEW terminal, navigate to project root first!
 cd orchestrator-ui/frontend
 npm run dev
 
-# 6. Open http://localhost:5173
+# 5. Open http://localhost:5173
 ```
 
 ### GitHub OAuth Setup
@@ -48,19 +73,76 @@ npm run dev
 
 **Resume failed generations**: Project History → Click "▶ Resume Generation"
 
+### Quick Start (Step by Step)
+
+If you're getting errors, follow this exact sequence:
+
+```bash
+# 1. Verify you're in project root
+pwd  # Should show: .../agentic-orchestra
+ls .env.example requirements.txt  # Should list both files
+
+# 2. If not in root, navigate there first
+cd ~/PycharmProjects/agentic-orchestra  # Adjust path as needed
+
+# 3. Setup environment (if .env doesn't exist)
+cp .env.example .env
+# Edit .env with your credentials
+
+# 4. Install Python dependencies
+pip install -r requirements.txt
+
+# 5. Install frontend dependencies
+cd orchestrator-ui/frontend
+npm install
+cd ../..  # Back to root
+
+# 6. Start Backend (Terminal 1)
+cd orchestrator-ui/backend
+export PYTHONPATH="$(cd ../.. && pwd -W)"  # Git Bash on Windows
+python main.py
+# Should show: "Starting Orchestrator UI Backend..." and "Database initialized"
+
+# 7. Start Frontend (Terminal 2 - NEW terminal, start from root again!)
+cd orchestrator-ui/frontend
+npm run dev
+# Should show: "Local: http://localhost:5173"
+
+# 8. Open browser
+# Go to: http://localhost:5173
+```
+
+### Verify Installation
+
+```bash
+# Check backend is running
+curl http://localhost:8000/health
+# Should return: {"status":"healthy"}
+
+# Check frontend is running
+curl http://localhost:5173
+# Should return: HTML response
+
+# Check database (automatically initialized on first backend start)
+ls database/orchestrator.db  # Should exist after backend starts
+```
+
+**Note**: Database is auto-initialized by `main.py` on first startup (no manual `init_db.py` needed)
+
 ---
 
 ## What It Does
 
-Specialized AI agents collaborate to generate complete applications:
+Specialized AI agents collaborate via **LangGraph** to generate complete applications:
 
-1. **Architect Agent** → Design, architecture, database schema
-2. **Backend Agent** → .NET API, models, services
-3. **Frontend Agent** → React components, routing, state
-4. **DevOps Agent** → GitHub Actions, deployment config
-5. **Backlog Agent** → Azure DevOps work items
+1. **Design Node** (`design_node.py`) → Architecture design, database schema (PlantUML), system docs
+2. **Backend Node** (`backend_node.py`) → .NET 8 API, models, services, DTOs, repositories
+3. **Frontend Node** (`frontend_node.py`) → React + TypeScript components, routing, state management
+4. **DevOps Node** (`devops_node.py`) → GitHub Actions CI/CD, deployment workflows
+5. **Backlog Node** (`backlog_node.py`) → Azure DevOps work items and task backlog
+6. **Publish Node** (`publish_node.py`) → GitHub repository creation and code push
 
-Each agent's output feeds the next, creating a full pipeline from requirements to deployment.
+Each node's output feeds the next in a LangGraph-orchestrated pipeline from requirements to deployed repo.
 
 **Best for**: MVPs, prototypes, CRUD apps, small teams needing rapid iteration
 **Not for**: Complex algorithms, legacy integration, production without human review
@@ -110,12 +192,35 @@ Full API docs: http://localhost:8000/docs (Swagger UI)
 
 ## Troubleshooting
 
+**ModuleNotFoundError: No module named 'orchestrator_ui' or 'AI_agents'**
+
+This means PYTHONPATH is not set correctly. Make sure you:
+1. Are starting from project root (not from `orchestrator-ui/backend`)
+2. Set PYTHONPATH before running `python main.py`
+
+```bash
+# Git Bash (Windows):
+cd ~/PycharmProjects/agentic-orchestra  # Go to root first!
+cd orchestrator-ui/backend
+export PYTHONPATH="$(cd ../.. && pwd -W)"
+python main.py
+
+# Verify PYTHONPATH is set:
+echo $PYTHONPATH  # Should show full path to project root
+```
+
 **Port 8000 locked**
 ```bash
-# Option 1: Kill process
+# Linux/Mac: Kill process
 lsof -ti:8000 | xargs kill -9
 
-# Option 2: Use different port (Windows TIME_WAIT workaround)
+# Windows (PowerShell): Kill process
+Get-Process -Id (Get-NetTCPConnection -LocalPort 8000).OwningProcess | Stop-Process -Force
+
+# Windows (CMD): Kill process
+for /f "tokens=5" %a in ('netstat -aon ^| find ":8000" ^| find "LISTENING"') do taskkill /F /PID %a
+
+# Alternative: Use different port (all platforms)
 cd orchestrator-ui/backend
 python main.py 9000
 ```
@@ -130,10 +235,21 @@ python main.py 9000
 
 **Database locked**
 ```bash
+# Linux/Mac: Kill all Python processes
 pkill -f python
+rm -f database/orchestrator.db
+
+# Windows (PowerShell): Kill Python processes
+Get-Process python | Stop-Process -Force
+Remove-Item database\orchestrator.db -Force -ErrorAction SilentlyContinue
+
+# Windows (CMD): Kill Python processes
+taskkill /F /IM python.exe
+del /F database\orchestrator.db
+
+# Restart backend (database auto-initializes on startup)
 cd orchestrator-ui/backend
-rm -f ../../database/orchestrator.db
-python init_db.py
+python main.py
 ```
 
 ---
@@ -189,20 +305,27 @@ Failed generations can be retried with one click:
 
 ## Architecture
 
+### LangGraph Pipeline Flow
 ```
-User Input → Architect → Backend Agent → Frontend Agent → DevOps Agent → Backlog Agent → GitHub Repo
-              (design)    (.NET code)    (React code)    (CI/CD)         (tasks)
+User Input → Design Node → Backend Node → Frontend Node → DevOps Node → Backlog Node → Publish Node → GitHub Repo
+              (design)      (.NET code)    (React code)    (CI/CD)        (tasks)       (publish)
 ```
 
-**Frontend Flow**
+**Orchestration**: `AI_agents/graph/graph.py` (LangGraph StateGraph)
+**Shared State**: `AI_agents/graph/state.py` (OrchestraState TypedDict)
+**Nodes**: `AI_agents/graph/nodes/*.py` (one file per agent)
+
+### Frontend Flow
 ```
 AuthScreen → AIProviderSetup → MVPCreationScreen → ConfirmationScreen → DeployAuth → Progress → Success
 ```
 
-**Database**: SQLite (local), PostgreSQL (production)
-**Auth**: GitHub OAuth → JWT (24h)
-**WebSocket**: Real-time generation progress
-**Encryption**: Fernet (API keys)
+### Tech Details
+- **Database**: SQLite (local), PostgreSQL (production)
+- **Auth**: GitHub OAuth → JWT (24h)
+- **WebSocket**: Real-time generation progress
+- **Encryption**: Fernet (API keys)
+- **LLM Client**: `AI_agents/utils/llm_client.py` (factory pattern, supports OpenAI/Anthropic/custom)
 
 ---
 
