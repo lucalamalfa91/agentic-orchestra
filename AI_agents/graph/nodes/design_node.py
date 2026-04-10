@@ -76,9 +76,9 @@ async def design_node(state: OrchestraState) -> OrchestraState:
         state["agent_statuses"]["design"] = AgentStatus.FAILED
         return state
 
-    # Create Deep Agent with planning enabled
+    # Create Deep Agent (write_todos tool is built-in for planning)
     agent = create_deep_agent(
-        llm=llm,
+        model=llm,
         tools=[],  # No external tools needed — pure LLM generation
         system_prompt=(
             "You are a .NET/React/Azure architect. "
@@ -87,7 +87,6 @@ async def design_node(state: OrchestraState) -> OrchestraState:
             "api_endpoints, and deployment_target. "
             "Think step by step before writing the final design."
         ),
-        enable_todos=True,  # Forces planning before execution
     )
 
     # Build RAG context section

@@ -1,8 +1,6 @@
 # Prompt 02 — LangGraph State Schema
 
-Based on your previous analysis of `lucalamalfa91/agentic-orchestra`
-(see `.claude/context/migration_status.md`), design the LangGraph state schema.
-Do not modify any existing files.
+Design in plan mode the LangGraph state schema, according with claude.md file. Do not modify any existing files.
 
 ## Task: Create `AI_agents/graph/state.py`
 
@@ -13,7 +11,7 @@ Requirements:
 - Fields to include:
   - `requirements`: str — raw text from user
   - `parsed_requirements`: Optional[dict] — structured after parsing
-  - `design_yaml`: Optional[dict] — produced by Design Agent
+  - `design_yaml`: Optional[dict] — produced by architect Agent
   - `api_schema`: Optional[list] — extracted from design_yaml
   - `db_schema`: Optional[list] — extracted from design_yaml
   - `backend_code`: Optional[dict] — produced by Backend Agent
@@ -29,7 +27,7 @@ Requirements:
   - `ai_provider`: str — "openai" or "anthropic"
   - `agent_statuses`: dict[str, str] — key=agent_name, value=AgentStatus
 
-- Add a short docstring comment on each field explaining:
+- Add a really short docstring comment on each field explaining:
   what agent PRODUCES it and what agent CONSUMES it
 - Use `Optional[]` for fields that may not be present at all steps
 - Add an `AgentStatus` enum with values:

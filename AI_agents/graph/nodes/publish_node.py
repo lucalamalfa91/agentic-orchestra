@@ -24,7 +24,6 @@ Error Handling:
 import logging
 import re
 from deepagents import create_deep_agent
-from deepagents.tools.filesystem import ls, read_file
 from AI_agents.utils.llm_client import get_llm_client
 from AI_agents.graph.state import OrchestraState, AgentStatus
 from mcp_servers.client import MCPClientManager
@@ -85,10 +84,10 @@ async def publish_node(state: OrchestraState) -> OrchestraState:
         state["agent_statuses"]["publish_agent"] = AgentStatus.FAILED
         return state
 
-    # Create Deep Agent with filesystem + GitHub tools
+    # Create Deep Agent with GitHub tools (filesystem tools are built-in)
     agent = create_deep_agent(
-        llm=llm,
-        tools=[ls, read_file] + github_tools,
+        model=llm,
+        tools=github_tools,
         system_prompt=(
             "You are a DevOps agent responsible for publishing "
             "generated application code to a GitHub repository. "

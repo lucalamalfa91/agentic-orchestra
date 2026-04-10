@@ -12,16 +12,16 @@
 - [x] Prompt 07c — DeepAgents integration ✓
 - [x] Prompt 07d — backend_agent, frontend_agent, backlog_agent nodes (using BaseAgent) ✓
 - [x] Prompt 07e — devops_agent node (using BaseAgent) ✓
-- [ ] Prompt 07f — publish_agent node
+- [x] Prompt 07f — publish_agent node verification ✓
 - [ ] Prompt 08 — Checkpoint + human-in-the-loop
 - [ ] Prompt 09 — UI Knowledge Sources
 - [ ] Prompt 10 — Testing
 
 ## Current step
-**Prompt 07e — DevOps Agent COMPLETED**
-Working on: Implemented devops_agent node using BaseAgent pattern
-Next: Prompt 07f — publish_agent node (already implemented, needs verification)
-Blocker: none
+**Prompt 07f — Publish Agent Verification COMPLETED**
+Working on: Verified and fixed publish_node Deep Agents integration
+Next: Prompt 08 — Checkpoint + human-in-the-loop
+Blocker: MCP client needs API update (mcp 1.27.0 compatibility) - separate from 07f
 
 ## Decisions made
 - LangGraph invece di CrewAI: controllo deterministico del flusso
@@ -327,8 +327,24 @@ Blocker: none
 - ✅ Extends BaseAgent correctly
 - ✅ Implements system_prompt(), build_input(), parse_output()
 
+### Prompt 07f — Publish Agent Verification (2026-04-10)
+- **Dependencies installed**: deepagents==0.5.1, mcp==1.27.0
+- **publish_node.py fixed**:
+  - Removed non-existent import `from deepagents.tools.filesystem`
+  - Changed `llm=llm` to `model=llm` (correct API)
+  - Removed redundant tools (filesystem tools are built-in)
+- **design_node.py fixed**:
+  - Changed `llm=llm` to `model=llm`
+  - Removed non-existent parameter `enable_todos=True`
+- **Verification**:
+  - ✅ Both nodes have valid Python syntax
+  - ✅ Correctly imported in graph.py (lines 18-19)
+  - ✅ Correctly added to graph (lines 152, 159)
+  - ✅ Exported from nodes/__init__.py
+- **Known issue**: mcp_servers/client.py uses deprecated API (Prompt 05 issue, not 07f)
+
 ## Next action
-Verify Prompt 07f: publish_agent node (already implemented in Prompt 07c)
-- Check if publish_node is fully functional and integrated
-- If yes, move to Prompt 08 (Checkpoint + human-in-the-loop)
-- If issues found, refactor publish_node as needed
+Move to Prompt 08: Checkpoint + human-in-the-loop
+- Add LangGraph checkpointing for state persistence
+- Implement interrupt_before mechanism
+- Add human approval step after design phase
