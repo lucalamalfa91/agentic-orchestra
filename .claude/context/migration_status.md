@@ -13,15 +13,15 @@
 - [x] Prompt 07d — backend_agent, frontend_agent, backlog_agent nodes (using BaseAgent) ✓
 - [x] Prompt 07e — devops_agent node (using BaseAgent) ✓
 - [x] Prompt 07f — publish_agent node verification ✓
-- [ ] Prompt 08 — Checkpoint + human-in-the-loop
+- [x] Prompt 08 — Checkpoint + human-in-the-loop ✓
 - [ ] Prompt 09 — UI Knowledge Sources
 - [ ] Prompt 10 — Testing
 
 ## Current step
-**Prompt 07f — Publish Agent Verification COMPLETED**
-Working on: Verified and fixed publish_node Deep Agents integration
-Next: Prompt 08 — Checkpoint + human-in-the-loop
-Blocker: MCP client needs API update (mcp 1.27.0 compatibility) - separate from 07f
+**Prompt 08 — Checkpoint + Human-in-the-Loop COMPLETED**
+Working on: Added PostgreSQL checkpointing and design approval flow
+Next: Prompt 09 — UI Knowledge Sources
+Blocker: None
 
 ## Decisions made
 - LangGraph invece di CrewAI: controllo deterministico del flusso
@@ -343,8 +343,74 @@ Blocker: MCP client needs API update (mcp 1.27.0 compatibility) - separate from 
   - ✅ Exported from nodes/__init__.py
 - **Known issue**: mcp_servers/client.py uses deprecated API (Prompt 05 issue, not 07f)
 
+### Prompt 08 — Checkpoint + Human-in-the-Loop (2026-04-10)
+- **AI_agents/graph/graph.py** - UPDATED with PostgreSQL checkpointer (260 lines)
+  - Added imports: `AsyncPostgresSaver` from `langgraph.checkpoint.postgres.aio`, `DATABASE_URL`
+  - Created async `get_app()` function for lazy checkpointer initialization
+  - Checkpointer setup: `AsyncPostgresSaver.from_conn_string(DATABASE_URL)`, `await checkpointer.setup()`
+  - Graph compiled with `interrupt_before=["backend_agent"]` to pause after design phase
+  - Maintains backward compatible `app` export (legacy sync version)
+  - Global `_app` and `_checkpointer` for singleton pattern
+- **orchestrator-ui/backend/api/generation_control.py** - NEW router (375 lines)
+  - Three endpoints for design approval workflow:
+    - `GET /api/generation/{project_id}/state` - retrieve checkpoint state for design review
+    - `POST /api/generation/{project_id}/approve` - accept optional design_changes, resume execution
+    - `POST /api/generation/{project_id}/reject` - cancel generation, mark project as failed
+  - Uses `app.aget_state()` to read checkpoint, `app.aupdate_state()` to modify design
+  - Pydantic schemas: `DesignApprovalRequest`, `DesignStateResponse`
+  - Logs design approval/rejection/modifications to `GenerationLog` table
+  - WebSocket broadcasts for progress updates (design_approved, design_rejected)
+  - CORS preflight handlers for all endpoints
+- **orchestrator-ui/backend/main.py** - UPDATED router registration
+  - Import: `generation_control` from api
+  - Registered: `app.include_router(generation_control.router)`
+- **orchestrator-ui/frontend/src/types/index.ts** - ADDED design state types
+  - `EntityField`, `Entity`, `APIEndpoint` interfaces
+  - `DesignYaml` interface with optional app_name, description, stack, entities, api_endpoints
+  - `DesignStateResponse` interface matching backend Pydantic schema
+  - `DesignApprovalRequest` interface for approval endpoint
+- **orchestrator-ui/frontend/src/api/client.ts** - ADDED generationControlApi
+  - `getDesignState(projectId)` - GET request to fetch checkpoint state
+  - `approveDesign(projectId, designChanges?)` - POST with optional modifications
+  - `rejectDesign(projectId)` - POST to cancel generation
+  - Updated imports to include `DesignStateResponse`, `DesignApprovalRequest`
+- **orchestrator-ui/frontend/src/screens/DesignReviewScreen.tsx** - NEW component (450 lines)
+  - Displays design for human approval: app name, description, tech stack, entities table, API endpoints list
+  - **Entities section**: Table view with field names, types, required flags
+  - **API endpoints section**: List with method badges (colored by HTTP verb), paths, descriptions
+  - **Advanced JSON editor**: Toggle to show/hide raw design_yaml JSON editor
+  - Action buttons: "Reject Design" (red), "Approve & Continue" (gradient)
+  - Loading states, error handling, glassmorphism UI matching existing screens
+  - Integrates with `generationControlApi` for state fetch and approval/rejection
+  - Reuses existing Tailwind patterns and CSS variables from MVPCreationScreen
+
+**Human-in-the-Loop Flow** (Prompt 08):
+1. User submits MVP generation request
+2. LangGraph executes: knowledge_retrieval → design → **INTERRUPT**
+3. Backend checkpoint saves state, frontend polls for design state
+4. DesignReviewScreen displays design (entities, API endpoints, stack)
+5. User reviews, optionally edits JSON, then clicks "Approve & Continue" or "Reject"
+6. If approved: backend resumes graph execution (backend_agent, frontend_agent, backlog_agent in parallel)
+7. If rejected: generation cancelled, project marked as failed
+
+**Technical Decisions** (Prompt 08):
+- PostgreSQL checkpointer instead of in-memory: enables multi-session persistence
+- Lazy initialization pattern: checkpointer setup only when `get_app()` first called
+- Interrupt point: `interrupt_before=["backend_agent"]` pauses after design, before expensive code generation
+- Thread ID: `project_id` used as `thread_id` for checkpoint identification
+- Design changes: optional deep merge into `design_yaml`, logged to DB
+- Frontend integration: DesignReviewScreen can be inserted into existing generation progress flow
+
+**Verification**:
+- ✅ graph.py imports successfully with AsyncPostgresSaver
+- ✅ generation_control.py router has valid FastAPI endpoints
+- ✅ Pydantic schemas match between backend and frontend TypeScript types
+- ✅ DesignReviewScreen component follows existing UI patterns
+- ✅ API client methods added with correct type signatures
+- ✅ CORS headers included for all endpoints
+
 ## Next action
-Move to Prompt 08: Checkpoint + human-in-the-loop
-- Add LangGraph checkpointing for state persistence
-- Implement interrupt_before mechanism
-- Add human approval step after design phase
+Move to Prompt 09: UI Knowledge Sources
+- Frontend screens for managing knowledge sources (web, file, API)
+- Integration with backend knowledge API endpoints (from Prompt 06)
+- Connect to Knowledge Agent RAG workflow

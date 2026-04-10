@@ -109,3 +109,53 @@ export interface AIProviderConfig {
   base_url: string;
   api_key_set: boolean;
 }
+
+// Design state types (for human-in-the-loop approval)
+export interface EntityField {
+  name: string;
+  type: string;
+  required?: boolean;
+  description?: string;
+}
+
+export interface Entity {
+  name: string;
+  fields: EntityField[];
+  description?: string;
+}
+
+export interface APIEndpoint {
+  method: string;
+  path: string;
+  description: string;
+  entity?: string;
+}
+
+export interface DesignYaml {
+  app_name?: string;
+  description?: string;
+  stack?: {
+    frontend?: string;
+    backend?: string;
+    database?: string;
+    deploy_platform?: string;
+  };
+  entities?: Entity[];
+  api_endpoints?: APIEndpoint[];
+  [key: string]: any; // Allow additional properties
+}
+
+export interface DesignStateResponse {
+  project_id: string;
+  current_step: string;
+  design_yaml?: DesignYaml | null;
+  api_schema?: any;
+  db_schema?: any;
+  errors: Record<string, string>;
+  agent_statuses: Record<string, string>;
+  completed_steps: string[];
+}
+
+export interface DesignApprovalRequest {
+  design_changes?: Record<string, any>;
+}

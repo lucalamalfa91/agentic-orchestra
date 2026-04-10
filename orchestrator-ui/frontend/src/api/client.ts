@@ -8,7 +8,9 @@ import type {
   PaginatedProjects,
   ProjectWithRequirements,
   ProjectRequirement,
-  GenerationLog
+  GenerationLog,
+  DesignStateResponse,
+  DesignApprovalRequest
 } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -104,6 +106,33 @@ export const generationApi = {
    */
   async startGeneration(request: GenerationRequest): Promise<GenerationStartResponse> {
     const response = await api.post<GenerationStartResponse>('/api/generation/start', request);
+    return response.data;
+  },
+};
+
+export const generationControlApi = {
+  /**
+   * Get current design state from checkpoint (for review).
+   */
+  async getDesignState(projectId: string): Promise<DesignStateResponse> {
+    const response = await api.get<DesignStateResponse>(`/api/generation/${projectId}/state`);
+    return response.data;
+  },
+
+  /**
+   * Approve design with optional modifications and resume execution.
+   */
+  async approveDesign(projectId: string, designChanges?: Record<string, any>): Promise<{ message: string }> {
+    const body: DesignApprovalRequest = designChanges ? { design_changes: designChanges } : {};
+    const response = await api.post(`/api/generation/${projectId}/approve`, body);
+    return response.data;
+  },
+
+  /**
+   * Reject design and cancel generation.
+   */
+  async rejectDesign(projectId: string): Promise<{ message: string }> {
+    const response = await api.post(`/api/generation/${projectId}/reject`);
     return response.data;
   },
 };

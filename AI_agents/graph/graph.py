@@ -3,16 +3,19 @@ LangGraph orchestration graph for Agentic Orchestra.
 Replaces run_all_agents.py with declarative graph-based flow.
 
 Graph structure:
-START → knowledge_retrieval → design → [backend, frontend, backlog in parallel]
+START → knowledge_retrieval → design → INTERRUPT (human approval)
+  → [backend, frontend, backlog in parallel]
   → integration_check → conditional(errors? error_handler : devops_agent)
   → publish_agent → END
 """
 
 import logging
-from typing import Literal
+import os
+from typing import Literal, Optional
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from .state import OrchestraState, AgentStatus
 from .nodes.design_node import design_node
@@ -23,6 +26,13 @@ from .nodes.backlog_node import backlog_node
 from .nodes.devops_node import devops_node
 
 logger = logging.getLogger(__name__)
+
+# Get DATABASE_URL from environment (same as main backend)
+try:
+    from orchestrator_ui.backend.database import DATABASE_URL
+except ModuleNotFoundError:
+    # Fallback for standalone execution
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///database/orchestrator.db")
 
 
 # ============================================================================
@@ -192,13 +202,60 @@ def create_graph() -> StateGraph:
     return graph
 
 
-# Compile the graph (checkpointer will be added in Prompt 08)
+# ============================================================================
+# Graph compilation with checkpointer (Prompt 08)
+# ============================================================================
+
+# Lazy compilation - checkpointer initialized on first use
+_app: Optional[StateGraph] = None
+_checkpointer: Optional[AsyncPostgresSaver] = None
+
+
+async def get_app():
+    """
+    Get compiled LangGraph app with PostgreSQL checkpointer.
+
+    Initializes checkpointer on first call (lazy initialization).
+    The checkpointer enables:
+    - State persistence across sessions
+    - Human-in-the-loop approval after design phase
+    - Resume from checkpoints after interrupts
+
+    Returns:
+        Compiled LangGraph application
+    """
+    global _app, _checkpointer
+
+    if _app is None:
+        logger.info("Initializing LangGraph app with PostgreSQL checkpointer...")
+
+        # Create checkpointer from DATABASE_URL
+        _checkpointer = AsyncPostgresSaver.from_conn_string(DATABASE_URL)
+
+        # Setup checkpoint tables in database
+        await _checkpointer.setup()
+        logger.info("PostgreSQL checkpointer initialized successfully")
+
+        # Build and compile graph
+        graph_builder = create_graph()
+        _app = graph_builder.compile(
+            checkpointer=_checkpointer,
+            interrupt_before=["backend_agent"]  # Pause after design for human approval
+        )
+        logger.info("LangGraph app compiled with interrupt_before=['backend_agent']")
+
+    return _app
+
+
+# For backward compatibility (synchronous access)
+# WARNING: This will fail if checkpointer is not initialized
+# Use get_app() instead for proper async initialization
 graph_builder = create_graph()
-app = graph_builder.compile(checkpointer=None)
+app = graph_builder.compile(checkpointer=None)  # Legacy sync version
 
 
 # ============================================================================
 # Exports
 # ============================================================================
 
-__all__ = ["app", "create_graph"]
+__all__ = ["app", "get_app", "create_graph"]
