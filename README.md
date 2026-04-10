@@ -62,6 +62,8 @@ npm run dev
 5. Watch the generation progress
 6. View your new repository on GitHub
 
+**If generation fails**: Navigate to Project History and click "▶ Resume Generation" to retry with the same requirements.
+
 ---
 
 ## Using requirements.txt
@@ -141,6 +143,46 @@ Backend: node
 Database: none
 Deploy to: vercel
 ```
+
+---
+
+## Resume Failed Generations
+
+When a generation fails, you can resume it without re-entering requirements:
+
+1. Navigate to **Project History**
+2. Find the failed project card
+3. Click **"▶ Resume Generation"** button
+4. Confirm the dialog
+5. Generation restarts from step 1 with the same requirements
+
+### How It Works
+
+- **One-Click Resume**: Simple button on failed project cards
+- **Attempt Tracking**: Each resume increments the attempt counter (`generation_attempt`)
+- **Full History**: All attempts are logged separately for debugging
+- **Clean Restart**: Always starts from step 1 (no partial state recovery)
+- **WebSocket Progress**: Real-time updates just like new generations
+
+### Technical Details
+
+**Architecture Decision**: We chose **restart from beginning** over **checkpoint resume** because:
+- ✅ Simpler implementation using existing flow
+- ✅ More reliable (same code path, no state corruption)
+- ✅ Stateless (works across server restarts)
+- ✅ Separate logs per attempt (easier debugging)
+- ⚠️ Slower (reruns all steps)
+
+**Database Schema**:
+- `projects.generation_attempt`: Tracks total attempts for each project
+- `generation_logs.generation_attempt`: Tags logs by attempt number for filtering
+
+**API**: `POST /api/projects/{project_id}/resume` - see [API Documentation](#api-documentation)
+
+**Limitations**:
+- No mid-flow resume (always restarts from beginning)
+- Requirements cannot be modified during resume (delete and recreate instead)
+- No automatic retry (manual click required)
 
 ---
 
@@ -558,6 +600,23 @@ npm install
   }
   ```
 - Response: `{"id": "gen_123", "websocket_url": "ws://..."}`
+
+**POST** `/api/projects/{project_id}/resume`
+- Resume a failed generation with same requirements
+- Headers: `Authorization: Bearer jwt_token`
+- No request body (requirements loaded from database)
+- Response:
+  ```json
+  {
+    "generation_id": "abc-123-def-456",
+    "message": "Resuming generation for project My App (attempt #2)",
+    "websocket_url": "ws://localhost:8000/ws/generation/abc-123-def-456"
+  }
+  ```
+- Error Responses:
+  - `404`: Project not found
+  - `400`: Project status is not 'failed'
+  - `404`: Requirements not found in database
 
 **WS** `/ws/generation/{generation_id}`
 - WebSocket connection for real-time progress updates
