@@ -43,16 +43,16 @@ Your task is to generate a comprehensive product backlog based on the provided r
 
 CRITICAL OUTPUT FORMAT:
 You must output ONLY valid JSON with this exact structure (no markdown, no extra text):
-{
+{{
   "items": [
-    {
+    {{
       "title": "As a user, I want to...",
       "body": "## Description\\n...\\n\\n## Acceptance Criteria\\n- [ ] ...\\n- [ ] ...\\n\\n## Technical Notes\\n...",
       "labels": ["feature", "backend"],
       "priority": "high"
-    }
+    }}
   ]
-}
+}}
 
 REQUIREMENTS:
 1. Generate backlog items in these categories:
@@ -131,7 +131,13 @@ If any requirement is unclear, make reasonable assumptions based on common produ
         specification for the LLM to generate backlog items.
         """
         requirements = state.get("requirements", "")
-        design = state.get("design_yaml", {})
+        design = state.get("design_yaml")
+        if design is None:
+            raise ValueError(
+                "design_yaml is None - design agent may have failed. "
+                "Check state['errors']['design'] for details."
+            )
+
         api_endpoints = state.get("api_schema", [])
         db_entities = state.get("db_schema", [])
         rag_docs = state.get("rag_context", [])

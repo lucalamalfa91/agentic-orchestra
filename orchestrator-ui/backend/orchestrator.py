@@ -119,7 +119,7 @@ class GenerationOrchestrator:
             "requirements": requirements_text,
             "project_id": project_id,
             "user_id": str(user_id),
-            "ai_provider": "openai",  # TODO: Read from user config
+            "ai_provider": "anthropic",  # Changed to anthropic for testing
 
             # Agent-produced data (will be populated during execution)
             "parsed_requirements": None,

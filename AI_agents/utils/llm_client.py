@@ -108,7 +108,12 @@ def get_llm_client(provider: str, config: Dict[str, Any] = None):
                 "Backend must inject user's API key before agent execution."
             )
 
-        model = config.get("model", "claude-3-5-sonnet-20241022")
+        # Get model from config or env var, with fallback chain
+        model = config.get("model") or os.getenv("ANTHROPIC_MODEL")
+        if not model:
+            # Fallback to free tier model (works with most API keys)
+            model = "claude-3-haiku-20240307"
+
         logger.info(f"[llm_client] Creating Anthropic client: {model}")
 
         return ChatAnthropic(
