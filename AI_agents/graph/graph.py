@@ -20,6 +20,7 @@ from .nodes.publish_node import publish_node
 from .nodes.backend_node import backend_node
 from .nodes.frontend_node import frontend_node
 from .nodes.backlog_node import backlog_node
+from .nodes.devops_node import devops_node
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +31,12 @@ logger = logging.getLogger(__name__)
 # Real implementations:
 #   - design_node (Prompt 07a + 07c): Uses Deep Agents with planning
 #   - publish_node (Prompt 07c): Uses Deep Agents with filesystem + GitHub tools
-#   - backend_node (Prompt 07d): Uses BaseAgent for C# + ASP.NET Core generation
-#   - frontend_node (Prompt 07d): Uses BaseAgent for React + TypeScript generation
+#   - backend_node (Prompt 07d): Uses BaseAgent for backend generation (language-agnostic)
+#   - frontend_node (Prompt 07d): Uses BaseAgent for frontend generation (framework-agnostic)
 #   - backlog_node (Prompt 07d): Uses BaseAgent for product backlog generation
+#   - devops_node (Prompt 07e): Uses BaseAgent for CI/CD and Docker configuration
 # Stubs remaining:
-#   - knowledge_retrieval, integration_check, devops_agent
+#   - knowledge_retrieval, integration_check
 
 async def knowledge_retrieval(state: OrchestraState) -> OrchestraState:
     """Retrieve relevant documentation/examples from knowledge base (RAG)."""
@@ -83,24 +85,8 @@ async def error_handler(state: OrchestraState) -> OrchestraState:
     return state
 
 
-async def devops_agent(state: OrchestraState) -> OrchestraState:
-    """
-    Generate CI/CD pipeline (GitHub Actions) and Docker config.
-
-    Deep Agents not used here: this node is a one-shot code generator.
-    BaseAgent abstraction (Prompt 07b) is sufficient.
-    Will be implemented in Prompt 07e.
-    """
-    logger.info("[devops_agent] running...")
-
-    state["current_step"] = "devops_agent"
-    state["completed_steps"].append("devops_agent")
-    state["agent_statuses"]["devops_agent"] = AgentStatus.COMPLETED
-
-    # Stub: in Prompt 07e this will populate state["ci_cd_config"]
-    logger.info("[devops_agent] completed (stub)")
-    return state
-
+# devops_agent now uses real implementation from devops_node (Prompt 07e)
+# Defined in AI_agents/graph/nodes/devops_node.py
 
 # publish_agent now uses real implementation from publish_node (Prompt 07c)
 # Defined in AI_agents/graph/nodes/publish_node.py
@@ -169,7 +155,7 @@ def create_graph() -> StateGraph:
     graph.add_node("backlog_agent", backlog_node)
     graph.add_node("integration_check", integration_check)
     graph.add_node("error_handler", error_handler)
-    graph.add_node("devops_agent", devops_agent)
+    graph.add_node("devops_agent", devops_node)
     graph.add_node("publish_agent", publish_node)
 
     # Sequential: START → knowledge_retrieval → design
