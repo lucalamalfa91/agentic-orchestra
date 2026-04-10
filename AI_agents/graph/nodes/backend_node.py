@@ -1,13 +1,15 @@
 """
-Backend Agent Node — Generates C# + ASP.NET Core backend code from design.
+Backend Agent Node — Generates backend code from design (any language/framework).
 
 This agent:
 - Reads design_yaml, api_schema, db_schema from state
-- Generates complete backend codebase (Models, Services, Controllers, Program.cs)
+- Generates complete backend codebase in the framework specified in design_yaml["stack"]
+- Supports: C#/ASP.NET Core, Python/FastAPI, Node.js/Express, Java/Spring Boot, Go/Gin, etc.
 - Populates state["backend_code"] as dict {file_path: code_content}
 - Uses BaseAgent abstraction for consistent error handling and retries
 
 Created: Prompt 07d (2026-04-10)
+Modified: 2026-04-10 - Made language-agnostic
 """
 
 from AI_agents.base_agent import BaseAgent
@@ -20,81 +22,114 @@ logger = logging.getLogger(__name__)
 
 class BackendAgent(BaseAgent):
     """
-    Generates backend code (C# + ASP.NET Core) from architecture design.
+    Generates backend code from architecture design (language-agnostic).
 
     Input fields (from OrchestraState):
-        - design_yaml: dict with app_name, description, stack config
+        - design_yaml: dict with app_name, description, stack config (specifies backend_framework)
         - api_schema: list of API endpoints (method, path, description)
         - db_schema: list of entities (name, fields)
         - rag_context: optional list of relevant docs/examples
 
     Output fields (updates OrchestraState):
         - backend_code: dict mapping file paths to code content
-          Example: {"backend/Program.cs": "...", "backend/Models/User.cs": "..."}
+          Example: {"backend/main.py": "...", "backend/models/user.py": "..."}
+
+    Supported frameworks:
+        - C# / ASP.NET Core
+        - Python / FastAPI, Django, Flask
+        - Node.js / Express, NestJS, Fastify
+        - Java / Spring Boot
+        - Go / Gin, Echo, Fiber
+        - Ruby / Rails
+        - PHP / Laravel
+        - Any other backend framework specified by user
     """
 
     agent_name = "backend_agent"
 
     def system_prompt(self) -> str:
-        return """You are an expert backend architect specialized in C# and ASP.NET Core.
+        return """You are an expert polyglot backend architect with deep knowledge of modern web frameworks across all major programming languages.
 
-Your task is to generate a complete, production-ready backend codebase based on the provided design specification.
+Your task is to generate a complete, production-ready backend codebase in the EXACT framework specified by the user.
 
 CRITICAL OUTPUT FORMAT:
 You must output ONLY valid JSON with this exact structure (no markdown, no extra text):
 {
   "files": {
-    "backend/Program.cs": "... complete C# code ...",
-    "backend/Models/User.cs": "... complete C# code ...",
-    "backend/Services/UserService.cs": "... complete C# code ...",
-    "backend/Controllers/UserController.cs": "... complete C# code ...",
-    "backend/Data/AppDbContext.cs": "... complete C# code ...",
-    "backend/appsettings.json": "... JSON config ..."
+    "backend/[main_file]": "... complete code ...",
+    "backend/[folder]/[file]": "... complete code ...",
+    ...
   }
 }
 
-REQUIREMENTS:
-1. Generate ALL necessary files for a working ASP.NET Core application:
-   - Program.cs (with dependency injection, Swagger, CORS)
-   - Models/ (one file per entity from db_schema)
-   - Services/ (business logic for each entity)
-   - Controllers/ (API endpoints from api_schema)
-   - Data/AppDbContext.cs (Entity Framework Core context)
-   - appsettings.json (configuration with database connection string)
+Example for Python/FastAPI:
+{
+  "files": {
+    "backend/main.py": "...",
+    "backend/models/user.py": "...",
+    "backend/routers/users.py": "...",
+    "backend/requirements.txt": "..."
+  }
+}
 
-2. Code quality standards:
-   - Use async/await for all I/O operations
-   - Include XML documentation comments
-   - Follow C# naming conventions (PascalCase for public members)
-   - Add proper error handling (try-catch in controllers)
-   - Use dependency injection for services
-   - Include input validation (DataAnnotations)
+Example for Node.js/Express:
+{
+  "files": {
+    "backend/server.js": "...",
+    "backend/models/User.js": "...",
+    "backend/routes/users.js": "...",
+    "backend/package.json": "..."
+  }
+}
 
-3. Entity Framework Core:
-   - Configure DbContext with all entities
+FRAMEWORK-SPECIFIC REQUIREMENTS:
+You will receive the exact framework to use in the user prompt. Follow these principles for ANY framework:
+
+1. Generate ALL necessary files for a working application:
+   - Main entry point (main.py, server.js, Program.cs, etc.)
+   - Models/Entities (one file/class per entity from db_schema)
+   - Services/Business logic (business logic for each entity)
+   - Routes/Controllers/Endpoints (API endpoints from api_schema)
+   - Database configuration (ORM/connection setup)
+   - Configuration files (requirements.txt, package.json, appsettings.json, go.mod, etc.)
+
+2. Code quality standards (adapt to language conventions):
+   - Use async/await for all I/O operations (if language supports it)
+   - Include documentation comments (docstrings, JSDoc, XML docs, etc.)
+   - Follow language naming conventions (PascalCase, camelCase, snake_case, etc.)
+   - Add proper error handling (try-catch, error middleware, etc.)
+   - Use dependency injection / proper architecture patterns
+   - Include input validation (Pydantic, Joi, DataAnnotations, etc.)
+
+3. Database/ORM:
+   - Use appropriate ORM for the framework (SQLAlchemy, Prisma, EF Core, GORM, etc.)
+   - Configure all entities from db_schema
    - Use proper relationships (one-to-many, many-to-many as per design)
-   - Add navigation properties where appropriate
+   - Add migrations/schema management if applicable
 
 4. API Design:
    - RESTful conventions (GET, POST, PUT, DELETE)
    - Return appropriate HTTP status codes (200, 201, 404, 500)
-   - Use DTOs for request/response models if complex entities
-   - Enable Swagger/OpenAPI documentation
+   - Use DTOs/schemas for request/response validation
+   - Enable API documentation (Swagger/OpenAPI, auto-docs, etc.)
 
 5. Security:
    - Use HTTPS
    - Add CORS configuration
-   - Prepare for authentication (even if not fully implemented)
+   - Prepare for authentication (JWT, OAuth, sessions as appropriate)
    - Sanitize user inputs
+   - Use environment variables for secrets
 
 OUTPUT RULES:
 - Output MUST be valid JSON only (no markdown fences, no explanations)
-- All file paths use forward slashes: "backend/Models/User.cs"
-- All code must compile without errors
-- Include proper using statements in all C# files
+- All file paths use forward slashes: "backend/models/user.py"
+- Follow the framework's standard project structure
+- All code must run without errors (syntax correct, imports valid)
+- Include proper import statements in all files
 - Escape special characters in JSON (quotes, newlines, backslashes)
+- Use the EXACT framework specified - do not substitute or change it
 
-If any design field is missing or unclear, make reasonable assumptions and document them in code comments.
+IMPORTANT: Read the user prompt carefully to understand which framework to use. Generate code ONLY in that framework.
 """
 
     def build_input(self, state: OrchestraState) -> str:
@@ -154,8 +189,13 @@ If any design field is missing or unclear, make reasonable assumptions and docum
 ## Application Overview
 **Name**: {app_name}
 **Description**: {description}
+
+## REQUIRED TECHNOLOGY STACK
 **Backend Framework**: {backend_framework}
 **Database**: {database}
+
+CRITICAL: You MUST use {backend_framework} as the backend framework. Do not substitute with another framework.
+Generate code following {backend_framework} conventions and best practices.
 
 {api_section}
 
@@ -163,7 +203,9 @@ If any design field is missing or unclear, make reasonable assumptions and docum
 
 {context_section}
 
-Generate the complete backend codebase following the requirements in your system prompt.
+## Instructions
+Generate the complete backend codebase in {backend_framework} following the requirements in your system prompt.
+Use the appropriate project structure, naming conventions, and patterns for {backend_framework}.
 Output ONLY the JSON structure with all file paths and code content. No markdown, no explanations.
 """
 
@@ -207,9 +249,8 @@ Output ONLY the JSON structure with all file paths and code content. No markdown
 
             backend_files = parsed["files"]
 
-            # Validate that we have at least Program.cs
-            if not any("Program.cs" in path for path in backend_files.keys()):
-                logger.warning("[backend_agent] No Program.cs found in generated files")
+            # Log file count (no validation on specific files since framework varies)
+            logger.debug(f"[backend_agent] Files generated: {list(backend_files.keys())}")
 
             # Store in state
             state["backend_code"] = backend_files
@@ -234,7 +275,8 @@ async def backend_node(state: OrchestraState) -> OrchestraState:
     """
     Backend agent node for LangGraph graph.
 
-    Generates C# + ASP.NET Core backend code from design specifications.
+    Generates backend code in any framework specified in design_yaml["stack"]["backend_framework"].
+    Supports: C#/ASP.NET Core, Python/FastAPI, Node.js/Express, Java/Spring Boot, Go/Gin, etc.
     Uses BaseAgent for retry logic, error handling, and state management.
 
     Args:

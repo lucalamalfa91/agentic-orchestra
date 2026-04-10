@@ -240,21 +240,23 @@ Blocker: none
 - **LangGraph remains orchestrator**: Deep Agents used inside specific nodes, not replacing top-level flow
 
 ### Prompt 07d — Backend/Frontend/Backlog Agents (2026-04-10)
-- `AI_agents/graph/nodes/backend_node.py` - Backend code generator (9.5KB)
+- `AI_agents/graph/nodes/backend_node.py` - Backend code generator (LANGUAGE-AGNOSTIC)
   - BackendAgent extends BaseAgent
-  - Generates C# + ASP.NET Core backend code (Program.cs, Models/, Services/, Controllers/, Data/)
+  - **Polyglot support**: Generates backend in ANY framework specified in design_yaml["stack"]
+  - Supported: C#/ASP.NET Core, Python/FastAPI, Node.js/Express, Java/Spring Boot, Go/Gin, Ruby/Rails, PHP/Laravel, etc.
   - Inputs: design_yaml, api_schema, db_schema, rag_context
   - Output: state["backend_code"] as dict {file_path: code_content}
-  - Features: async/await, XML docs, EF Core, Swagger, DI, validation
-  - JSON output format with comprehensive C# code generation
+  - Features: Framework-specific patterns, ORM, API docs, validation, error handling
+  - JSON output format with framework-appropriate file structure
   - Retry logic (MAX_RETRIES=2) via BaseAgent
-- `AI_agents/graph/nodes/frontend_node.py` - Frontend code generator (9KB)
+- `AI_agents/graph/nodes/frontend_node.py` - Frontend code generator (FRAMEWORK-AGNOSTIC)
   - FrontendAgent extends BaseAgent
-  - Generates React + TypeScript + Vite frontend code (App.tsx, components/, pages/, api/)
+  - **Multi-framework support**: Generates frontend in ANY framework specified in design_yaml["stack"]
+  - Supported: React, Vue 3, Angular, Svelte, Next.js, Nuxt, SolidJS, Qwik, etc. (TypeScript or JavaScript)
   - Inputs: design_yaml, api_schema, rag_context
   - Output: state["frontend_code"] as dict {file_path: code_content}
-  - Features: TypeScript strict mode, React Router v6, Tailwind CSS, type-safe API client
-  - JSON output format with TSX/TS/CSS/JSON files
+  - Features: Framework-specific patterns, routing, state management, API client, styling
+  - JSON output format with framework-appropriate file structure
   - Responsive design, WCAG 2.1 AA accessibility
 - `AI_agents/graph/nodes/backlog_node.py` - Backlog generator (8.5KB)
   - BacklogAgent extends BaseAgent
