@@ -1,8 +1,12 @@
 """
-Design Agent Node for Agentic Orchestra.
+Design Agent Node for Agentic Orchestra (Deep Agents Integration).
 
 Generates structured application design (architecture, stack, entities, API endpoints)
-from user requirements using LLM with structured output.
+from user requirements using Deep Agents framework with built-in planning.
+
+This node uses Deep Agents (Prompt 07c) because the design process benefits from
+multi-step planning: parse requirements → analyze context → produce YAML structure →
+validate completeness. The enable_todos flag forces the agent to plan before executing.
 
 Input:
     - state["requirements"]: Raw user requirements text
@@ -14,82 +18,31 @@ Output:
     - state["db_schema"]: Extracted database schema list
 
 Error Handling:
-    - Retries up to 2 times on parse failures
     - Sets state["errors"]["design"] on failure
     - Never raises exceptions (returns state with FAILED status)
 """
 
 import logging
-from typing import Optional
-from pydantic import BaseModel, Field
-
-from AI_agents.graph.state import OrchestraState, AgentStatus
+import json
+import re
+from deepagents import create_deep_agent
 from AI_agents.utils.llm_client import get_llm_client
+from AI_agents.graph.state import OrchestraState, AgentStatus
 
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# Pydantic Schemas for Structured Output
-# ============================================================================
-
-class StackConfig(BaseModel):
-    """Technology stack configuration."""
-    backend_framework: str = Field(description="Backend framework (e.g., 'ASP.NET Core', 'FastAPI')")
-    frontend_framework: str = Field(description="Frontend framework (e.g., 'React', 'Vue')")
-    database: str = Field(description="Database technology (e.g., 'PostgreSQL', 'MongoDB')")
-    auth_method: str = Field(description="Authentication method (e.g., 'JWT', 'OAuth2')")
-
-
-class EntityField(BaseModel):
-    """Database entity field definition."""
-    name: str = Field(description="Field name")
-    type: str = Field(description="Field type (e.g., 'string', 'int', 'datetime')")
-    required: bool = Field(default=True, description="Whether field is required")
-
-
-class Entity(BaseModel):
-    """Database entity definition."""
-    name: str = Field(description="Entity/table name")
-    fields: list[EntityField] = Field(description="List of entity fields")
-
-
-class APIEndpoint(BaseModel):
-    """API endpoint definition."""
-    method: str = Field(description="HTTP method (GET, POST, PUT, DELETE)")
-    path: str = Field(description="API path (e.g., '/api/users/{id}')")
-    description: str = Field(description="Endpoint purpose and behavior")
-
-
-class DesignSchema(BaseModel):
-    """
-    Complete application design schema.
-
-    This schema enforces structured output from the LLM, eliminating
-    YAML/JSON parsing failures and validation issues.
-    """
-    app_name: str = Field(description="Application name (kebab-case, no spaces)")
-    description: str = Field(description="Brief application description (1-2 sentences)")
-    stack: StackConfig = Field(description="Technology stack configuration")
-    entities: list[Entity] = Field(description="Database entities/tables")
-    api_endpoints: list[APIEndpoint] = Field(description="REST API endpoints")
-    deployment_target: str = Field(description="Deployment platform (e.g., 'Railway', 'Azure')")
-
-
-# ============================================================================
-# Design Node Implementation
-# ============================================================================
-
 async def design_node(state: OrchestraState) -> OrchestraState:
     """
-    Generate application design from user requirements.
+    Generate application design from user requirements using Deep Agents.
 
     Algorithm:
-        1. Build prompt with requirements + RAG context
-        2. Call LLM with structured output (Pydantic schema)
-        3. Retry up to 2 times on failures
-        4. Extract design_yaml, api_schema, db_schema from response
-        5. Update orchestration state (current_step, completed_steps, statuses)
+        1. Initialize Deep Agent with planning enabled (enable_todos=True)
+        2. Build prompt with requirements + RAG context
+        3. Agent plans the design process step-by-step
+        4. Agent generates structured JSON design
+        5. Extract design_yaml, api_schema, db_schema from response
+        6. Update orchestration state
 
     Args:
         state: Current orchestration state
@@ -97,7 +50,7 @@ async def design_node(state: OrchestraState) -> OrchestraState:
     Returns:
         Updated state with design data or error information
     """
-    logger.info("[design_node] Starting design generation")
+    logger.info("[design_node] Starting design generation with Deep Agents")
 
     # Update orchestration state
     state["current_step"] = "design"
@@ -113,39 +66,8 @@ async def design_node(state: OrchestraState) -> OrchestraState:
         state["agent_statuses"]["design"] = AgentStatus.FAILED
         return state
 
-    # Build RAG context section
-    rag_section = ""
-    if rag_context:
-        logger.info(f"[design_node] Including {len(rag_context)} RAG documents")
-        rag_docs = "\n\n".join(
-            f"## Relevant Context\n{doc.get('content', '')}"
-            for doc in rag_context
-        )
-        rag_section = f"\n\n{rag_docs}"
-
-    # Build prompt
-    prompt = f"""You are an expert software architect specializing in .NET, React, and Azure.
-
-Analyze the following requirements and produce a detailed application design.
-
-Requirements:
-{requirements}
-{rag_section}
-
-Generate a complete design covering:
-1. Application name (kebab-case, no spaces)
-2. Brief description
-3. Technology stack (backend, frontend, database, auth)
-4. Database entities with fields
-5. API endpoints with HTTP methods and paths
-6. Deployment target
-
-Be specific and realistic. Use best practices for the chosen stack.
-"""
-
     # Get LLM client
     provider = state.get("ai_provider", "anthropic")
-
     try:
         llm = get_llm_client(provider, {"temperature": 0.1, "max_tokens": 4000})
     except Exception as e:
@@ -154,76 +76,90 @@ Be specific and realistic. Use best practices for the chosen stack.
         state["agent_statuses"]["design"] = AgentStatus.FAILED
         return state
 
-    # Create structured output chain
-    structured_llm = llm.with_structured_output(DesignSchema)
+    # Create Deep Agent with planning enabled
+    agent = create_deep_agent(
+        llm=llm,
+        tools=[],  # No external tools needed — pure LLM generation
+        system_prompt=(
+            "You are a .NET/React/Azure architect. "
+            "Your job is to analyze software requirements and produce "
+            "a structured design covering: app_name, stack, entities, "
+            "api_endpoints, and deployment_target. "
+            "Think step by step before writing the final design."
+        ),
+        enable_todos=True,  # Forces planning before execution
+    )
 
-    # Retry loop (up to 2 retries = 3 total attempts)
-    MAX_RETRIES = 2
-    last_error = None
+    # Build RAG context section
+    rag_section = ""
+    if rag_context:
+        logger.info(f"[design_node] Including {len(rag_context)} RAG documents")
+        rag_docs = "\n".join(
+            f"## Relevant Context\n{d.get('content', '')}" for d in rag_context
+        )
+        rag_section = f"\n\n{rag_docs}"
 
-    for attempt in range(1, MAX_RETRIES + 2):
-        try:
-            logger.info(f"[design_node] Attempt {attempt}/{MAX_RETRIES + 1}")
+    # Build user message
+    message = f"""
+Requirements:
+{requirements}
 
-            # Call LLM with structured output
-            design: DesignSchema = await structured_llm.ainvoke(prompt)
+{rag_section}
 
-            # Convert Pydantic model to dict
-            design_dict = design.model_dump()
+Produce a JSON object with keys:
+- app_name (string, kebab-case, no spaces)
+- description (string, 1-2 sentences)
+- stack (object with: backend_framework, frontend_framework, database, auth_method)
+- entities (array of objects with: name, fields as array of {{name, type, required}})
+- api_endpoints (array of objects with: method, path, description)
+- deployment_target (string, e.g., "Railway", "Azure")
 
-            logger.info(f"[design_node] Design generated: {design_dict.get('app_name')}")
+Be specific and realistic. Use best practices for the chosen stack.
+Return ONLY the JSON object, optionally wrapped in ```json markdown fences.
+    """.strip()
 
-            # Populate state with design data
-            state["design_yaml"] = design_dict
+    try:
+        # Invoke Deep Agent
+        logger.info("[design_node] Invoking Deep Agent with planning")
+        result = await agent.ainvoke({"messages": [{"role": "user", "content": message}]})
 
-            # Extract API schema
-            state["api_schema"] = [
-                {
-                    "method": ep.method,
-                    "path": ep.path,
-                    "description": ep.description
-                }
-                for ep in design.api_endpoints
-            ]
+        # Extract last assistant message
+        raw = result["messages"][-1].content
+        logger.debug(f"[design_node] Raw LLM response: {raw[:200]}...")
 
-            # Extract DB schema
-            state["db_schema"] = [
-                {
-                    "table": entity.name,
-                    "fields": [
-                        {
-                            "name": field.name,
-                            "type": field.type,
-                            "required": field.required
-                        }
-                        for field in entity.fields
-                    ]
-                }
-                for entity in design.entities
-            ]
+        # Parse JSON (strip markdown fences if present)
+        match = re.search(r"```(?:json)?\s*\n(.*?)```", raw, re.DOTALL)
+        json_str = match.group(1).strip() if match else raw.strip()
+        parsed = json.loads(json_str)
 
-            # Mark success
-            state["completed_steps"].append("design")
-            state["agent_statuses"]["design"] = AgentStatus.COMPLETED
+        logger.info(f"[design_node] Design generated: {parsed.get('app_name')}")
 
-            logger.info("[design_node] Design generation completed successfully")
-            return state
+        # Populate state with design data
+        state["design_yaml"] = parsed
 
-        except Exception as e:
-            last_error = e
-            logger.warning(f"[design_node] Attempt {attempt} failed: {str(e)}")
+        # Extract API schema
+        state["api_schema"] = parsed.get("api_endpoints", [])
 
-            # Add error feedback to prompt for retry
-            if attempt <= MAX_RETRIES:
-                prompt += f"\n\nPrevious attempt failed with error: {str(e)}\nPlease try again with valid data."
-            else:
-                # Max retries exceeded
-                logger.error(f"[design_node] All {MAX_RETRIES + 1} attempts failed")
-                state["errors"]["design"] = f"Failed after {MAX_RETRIES + 1} attempts: {str(last_error)}"
-                state["agent_statuses"]["design"] = AgentStatus.FAILED
-                return state
+        # Extract DB schema
+        state["db_schema"] = [
+            {"table": e["name"], "fields": e.get("fields", [])}
+            for e in parsed.get("entities", [])
+        ]
 
-    # Should never reach here, but satisfy type checker
-    state["errors"]["design"] = f"Unexpected error: {str(last_error)}"
-    state["agent_statuses"]["design"] = AgentStatus.FAILED
+        # Mark success
+        state["completed_steps"].append("design")
+        state["agent_statuses"]["design"] = AgentStatus.COMPLETED
+
+        logger.info("[design_node] Design generation completed successfully")
+
+    except json.JSONDecodeError as e:
+        logger.error(f"[design_node] JSON parsing failed: {e}")
+        state["errors"]["design"] = f"Failed to parse JSON design: {str(e)}"
+        state["agent_statuses"]["design"] = AgentStatus.FAILED
+
+    except Exception as e:
+        logger.error(f"[design_node] Unexpected error: {e}")
+        state["errors"]["design"] = str(e)
+        state["agent_statuses"]["design"] = AgentStatus.FAILED
+
     return state

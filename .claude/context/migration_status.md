@@ -1,4 +1,4 @@
-# Migration Status — Last updated: 2026-04-09
+# Migration Status — Last updated: 2026-04-10
 
 ## Completed steps
 - [ ] Prompt 01 — Analysis
@@ -9,7 +9,7 @@
 - [x] Prompt 06 — Backend FastAPI integration ✓
 - [x] Prompt 07a — design_node (real implementation) ✓
 - [x] Prompt 07b — BaseAgent abstraction ✓
-- [ ] Prompt 07c — DeepAgents integration
+- [x] Prompt 07c — DeepAgents integration ✓
 - [ ] Prompt 07d — backend_agent node (using BaseAgent)
 - [ ] Prompt 07e — frontend_agent node (using BaseAgent)
 - [ ] Prompt 07d — backlog_agent node
@@ -20,9 +20,9 @@
 - [ ] Prompt 10 — Testing
 
 ## Current step
-**Prompt 07b — BaseAgent Abstraction COMPLETED**
-Working on: Created shared BaseAgent abstraction for all agent nodes
-Next: Prompt 07c — DeepAgents integration
+**Prompt 07c — DeepAgents Integration COMPLETED**
+Working on: Integrated Deep Agents for design_node and publish_node
+Next: Prompt 07d — backend_agent node (using BaseAgent)
 Blocker: none
 
 ## Decisions made
@@ -53,6 +53,11 @@ Blocker: none
 - **Agent DRY pattern**: Agents implement only system_prompt(), build_input(), parse_output()
 - **Centralized retry logic**: MAX_RETRIES=2 in BaseAgent.run(), automatic error handling
 - **Consistent state updates**: BaseAgent auto-updates current_step, completed_steps, agent_statuses
+- **Deep Agents integration**: design_node and publish_node use Deep Agents framework (Prompt 07c)
+- **Selective Deep Agents use**: Only nodes with multi-step planning or tool loops use Deep Agents
+- **Deep Agents planning**: enable_todos=True forces agent to plan before executing
+- **Deep Agents filesystem tools**: ls, read_file for safe file operations in publish_node
+- **Hybrid architecture**: Deep Agents nodes coexist with BaseAgent nodes in same LangGraph graph
 
 ## Files created by this migration
 ### Prompt 02 (2026-04-08)
@@ -202,10 +207,44 @@ Blocker: none
   - NOT a pytest test — standalone script for quick validation
   - Includes instructions for deletion after validation
 
+### Prompt 07c — DeepAgents Integration (2026-04-10)
+- `requirements-knowledge.txt` - UPDATED with deepagents package
+  - Added: deepagents (LangChain Deep Agents framework)
+  - Enables multi-step planning, filesystem tools, sub-agent spawning
+- `AI_agents/graph/nodes/design_node.py` - REFACTORED to use Deep Agents (5.7KB)
+  - Replaced Pydantic structured output with Deep Agents planning
+  - Uses create_deep_agent() with enable_todos=True for step-by-step design
+  - Simplified JSON parsing (strips markdown fences, parses raw JSON)
+  - Maintains same state contract: design_yaml, api_schema, db_schema
+  - Error handling: catches JSON errors, sets state["errors"]["design"]
+- `AI_agents/graph/nodes/publish_node.py` - NEW Deep Agents node (4.8KB)
+  - Uses Deep Agents with filesystem tools (ls, read_file) + GitHub MCP tools
+  - Agent autonomously: lists files → reads content → creates repo → pushes files
+  - Extracts repository URL from agent response via regex
+  - Populates state["github_repo_url"]
+  - Error handling: catches all exceptions, sets state["errors"]["publish_agent"]
+- `AI_agents/graph/nodes/__init__.py` - UPDATED exports
+  - Added publish_node to exports
+  - Documented Deep Agents integration strategy in module docstring
+- `AI_agents/graph/graph.py` - UPDATED agent stubs
+  - Imported publish_node, replaced stub with real implementation
+  - Added docstring comments to backend_agent, frontend_agent, backlog_agent, devops_agent
+  - Comment: "Deep Agents not used here: one-shot code generator, BaseAgent sufficient"
+  - Updated graph.add_node("publish_agent", publish_node) to use real implementation
+
+**Deep Agents Design Decisions** (Prompt 07c):
+- **Selective application**: Only design_node and publish_node use Deep Agents
+- **design_node rationale**: Multi-step process (parse → analyze → structure → validate)
+- **publish_node rationale**: Tool loop required (filesystem + GitHub MCP tools)
+- **Not for simple nodes**: backend/frontend/backlog/devops remain BaseAgent (one-shot LLM calls)
+- **Hybrid graph**: Deep Agents nodes coexist with BaseAgent nodes in same LangGraph
+- **LangGraph remains orchestrator**: Deep Agents used inside specific nodes, not replacing top-level flow
+
 ## Next action
-Execute Prompt 07c: DeepAgents Integration
-- Integrate with DeepAgents framework for advanced agent capabilities
-- Details to be determined from prompt_07c_deepagents_integration.md
+Execute Prompt 07d: backend_agent, frontend_agent, backlog_agent nodes
+- Implement remaining agent nodes using BaseAgent pattern (NOT Deep Agents)
+- Each node: one-shot code generation with structured output
+- Details in prompt_07d_remaining_agents.md (if exists) or prompt_07_agent_nodes.md
 
 **BaseAgent pattern** (established by Prompt 07b):
 - All new agent nodes should extend BaseAgent

@@ -16,6 +16,7 @@ from langgraph.types import Send
 
 from .state import OrchestraState, AgentStatus
 from .nodes.design_node import design_node
+from .nodes.publish_node import publish_node
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,12 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Agent nodes
 # ============================================================================
-# Real implementations: design_node (Prompt 07)
-# Stubs: all others (will be implemented in subsequent Prompt 07 sessions)
+# Real implementations:
+#   - design_node (Prompt 07a + 07c): Uses Deep Agents with planning
+#   - publish_node (Prompt 07c): Uses Deep Agents with filesystem + GitHub tools
+# Stubs (BaseAgent pattern, no Deep Agents needed):
+#   - backend_agent, frontend_agent, backlog_agent, devops_agent
+#   (one-shot code generation, implemented in Prompt 07d-07f)
 
 async def knowledge_retrieval(state: OrchestraState) -> OrchestraState:
     """Retrieve relevant documentation/examples from knowledge base (RAG)."""
@@ -40,40 +45,58 @@ async def knowledge_retrieval(state: OrchestraState) -> OrchestraState:
 
 
 async def backend_agent(state: OrchestraState) -> OrchestraState:
-    """Generate backend code (C# + ASP.NET Core) from design."""
+    """
+    Generate backend code (C# + ASP.NET Core) from design.
+
+    Deep Agents not used here: this node is a one-shot code generator.
+    BaseAgent abstraction (Prompt 07b) is sufficient.
+    Will be implemented in Prompt 07d.
+    """
     logger.info("[backend_agent] running...")
 
     state["current_step"] = "backend_agent"
     state["completed_steps"].append("backend_agent")
     state["agent_statuses"]["backend_agent"] = AgentStatus.COMPLETED
 
-    # Stub: in Prompt 07 this will populate state["backend_code"]
+    # Stub: in Prompt 07d this will populate state["backend_code"]
     logger.info("[backend_agent] completed (stub)")
     return state
 
 
 async def frontend_agent(state: OrchestraState) -> OrchestraState:
-    """Generate frontend code (React + TypeScript) from design."""
+    """
+    Generate frontend code (React + TypeScript) from design.
+
+    Deep Agents not used here: this node is a one-shot code generator.
+    BaseAgent abstraction (Prompt 07b) is sufficient.
+    Will be implemented in Prompt 07e.
+    """
     logger.info("[frontend_agent] running...")
 
     state["current_step"] = "frontend_agent"
     state["completed_steps"].append("frontend_agent")
     state["agent_statuses"]["frontend_agent"] = AgentStatus.COMPLETED
 
-    # Stub: in Prompt 07 this will populate state["frontend_code"]
+    # Stub: in Prompt 07e this will populate state["frontend_code"]
     logger.info("[frontend_agent] completed (stub)")
     return state
 
 
 async def backlog_agent(state: OrchestraState) -> OrchestraState:
-    """Generate product backlog (user stories, issues) from requirements."""
+    """
+    Generate product backlog (user stories, issues) from requirements.
+
+    Deep Agents not used here: this node is a one-shot code generator.
+    BaseAgent abstraction (Prompt 07b) is sufficient.
+    Will be implemented in Prompt 07d.
+    """
     logger.info("[backlog_agent] running...")
 
     state["current_step"] = "backlog_agent"
     state["completed_steps"].append("backlog_agent")
     state["agent_statuses"]["backlog_agent"] = AgentStatus.COMPLETED
 
-    # Stub: in Prompt 07 this will populate state["github_issues"]
+    # Stub: in Prompt 07d this will populate state["github_issues"]
     logger.info("[backlog_agent] completed (stub)")
     return state
 
@@ -109,29 +132,26 @@ async def error_handler(state: OrchestraState) -> OrchestraState:
 
 
 async def devops_agent(state: OrchestraState) -> OrchestraState:
-    """Generate CI/CD pipeline (GitHub Actions) and Docker config."""
+    """
+    Generate CI/CD pipeline (GitHub Actions) and Docker config.
+
+    Deep Agents not used here: this node is a one-shot code generator.
+    BaseAgent abstraction (Prompt 07b) is sufficient.
+    Will be implemented in Prompt 07e.
+    """
     logger.info("[devops_agent] running...")
 
     state["current_step"] = "devops_agent"
     state["completed_steps"].append("devops_agent")
     state["agent_statuses"]["devops_agent"] = AgentStatus.COMPLETED
 
-    # Stub: in Prompt 07 this will populate state["ci_cd_config"]
+    # Stub: in Prompt 07e this will populate state["ci_cd_config"]
     logger.info("[devops_agent] completed (stub)")
     return state
 
 
-async def publish_agent(state: OrchestraState) -> OrchestraState:
-    """Publish generated app to GitHub repository."""
-    logger.info("[publish_agent] running...")
-
-    state["current_step"] = "publish_agent"
-    state["completed_steps"].append("publish_agent")
-    state["agent_statuses"]["publish_agent"] = AgentStatus.COMPLETED
-
-    # Stub: in Prompt 07 this will commit + push to state["github_repo_url"]
-    logger.info("[publish_agent] completed (stub)")
-    return state
+# publish_agent now uses real implementation from publish_node (Prompt 07c)
+# Defined in AI_agents/graph/nodes/publish_node.py
 
 
 # ============================================================================
@@ -198,7 +218,7 @@ def create_graph() -> StateGraph:
     graph.add_node("integration_check", integration_check)
     graph.add_node("error_handler", error_handler)
     graph.add_node("devops_agent", devops_agent)
-    graph.add_node("publish_agent", publish_agent)
+    graph.add_node("publish_agent", publish_node)
 
     # Sequential: START → knowledge_retrieval → design
     graph.add_edge(START, "knowledge_retrieval")
