@@ -10,9 +10,8 @@
 - [x] Prompt 07a — design_node (real implementation) ✓
 - [x] Prompt 07b — BaseAgent abstraction ✓
 - [x] Prompt 07c — DeepAgents integration ✓
-- [ ] Prompt 07d — backend_agent node (using BaseAgent)
-- [ ] Prompt 07e — frontend_agent node (using BaseAgent)
-- [ ] Prompt 07d — backlog_agent node
+- [x] Prompt 07d — backend_agent, frontend_agent, backlog_agent nodes (using BaseAgent) ✓
+- [ ] Prompt 07e — devops_agent node
 - [ ] Prompt 07e — devops_agent node
 - [ ] Prompt 07f — publish_agent node
 - [ ] Prompt 08 — Checkpoint + human-in-the-loop
@@ -20,9 +19,9 @@
 - [ ] Prompt 10 — Testing
 
 ## Current step
-**Prompt 07c — DeepAgents Integration COMPLETED**
-Working on: Integrated Deep Agents for design_node and publish_node
-Next: Prompt 07d — backend_agent node (using BaseAgent)
+**Prompt 07d — Backend/Frontend/Backlog Agents COMPLETED**
+Working on: Implemented backend_agent, frontend_agent, backlog_agent using BaseAgent
+Next: Prompt 07e — devops_agent node (using BaseAgent)
 Blocker: none
 
 ## Decisions made
@@ -240,11 +239,40 @@ Blocker: none
 - **Hybrid graph**: Deep Agents nodes coexist with BaseAgent nodes in same LangGraph
 - **LangGraph remains orchestrator**: Deep Agents used inside specific nodes, not replacing top-level flow
 
-## Next action
-Execute Prompt 07d: backend_agent, frontend_agent, backlog_agent nodes
-- Implement remaining agent nodes using BaseAgent pattern (NOT Deep Agents)
-- Each node: one-shot code generation with structured output
-- Details in prompt_07d_remaining_agents.md (if exists) or prompt_07_agent_nodes.md
+### Prompt 07d — Backend/Frontend/Backlog Agents (2026-04-10)
+- `AI_agents/graph/nodes/backend_node.py` - Backend code generator (9.5KB)
+  - BackendAgent extends BaseAgent
+  - Generates C# + ASP.NET Core backend code (Program.cs, Models/, Services/, Controllers/, Data/)
+  - Inputs: design_yaml, api_schema, db_schema, rag_context
+  - Output: state["backend_code"] as dict {file_path: code_content}
+  - Features: async/await, XML docs, EF Core, Swagger, DI, validation
+  - JSON output format with comprehensive C# code generation
+  - Retry logic (MAX_RETRIES=2) via BaseAgent
+- `AI_agents/graph/nodes/frontend_node.py` - Frontend code generator (9KB)
+  - FrontendAgent extends BaseAgent
+  - Generates React + TypeScript + Vite frontend code (App.tsx, components/, pages/, api/)
+  - Inputs: design_yaml, api_schema, rag_context
+  - Output: state["frontend_code"] as dict {file_path: code_content}
+  - Features: TypeScript strict mode, React Router v6, Tailwind CSS, type-safe API client
+  - JSON output format with TSX/TS/CSS/JSON files
+  - Responsive design, WCAG 2.1 AA accessibility
+- `AI_agents/graph/nodes/backlog_node.py` - Backlog generator (8.5KB)
+  - BacklogAgent extends BaseAgent
+  - Generates product backlog (user stories, technical tasks, testing, docs, technical debt)
+  - Inputs: requirements, design_yaml, api_schema, db_schema, rag_context
+  - Output: state["backlog_items"] as list of dicts [{title, body, labels, priority}]
+  - Features: GitHub issue format, acceptance criteria, technical notes, dependencies
+  - Priority levels: critical, high, medium, low
+  - Labels: type + component + priority (e.g., ["feature", "backend", "P1"])
+  - Generates 15-25 comprehensive backlog items
+- `AI_agents/graph/nodes/__init__.py` - UPDATED exports
+  - Added backend_node, frontend_node, backlog_node exports
+  - Updated module docstring with BaseAgent nodes section
+- `AI_agents/graph/graph.py` - UPDATED to use real implementations
+  - Imported backend_node, frontend_node, backlog_node
+  - Replaced stub functions with real node implementations
+  - Updated graph.add_node() calls to use imported nodes
+  - Updated comments to reflect Prompt 07d completion
 
 **BaseAgent pattern** (established by Prompt 07b):
 - All new agent nodes should extend BaseAgent
@@ -252,3 +280,10 @@ Execute Prompt 07d: backend_agent, frontend_agent, backlog_agent nodes
 - BaseAgent handles: LLM init, retries (MAX_RETRIES=2), logging, state updates
 - Error handling: BaseAgent catches exceptions, sets state["errors"], never raises
 - Automatic state updates: current_step, completed_steps, agent_statuses
+
+## Next action
+Execute Prompt 07e: devops_agent node
+- Implement devops_agent using BaseAgent pattern
+- Generates GitHub Actions CI/CD workflows and Docker configuration
+- Populates state["devops_config"]
+- Last agent node before testing and UI work

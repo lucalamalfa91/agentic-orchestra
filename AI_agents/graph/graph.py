@@ -17,6 +17,9 @@ from langgraph.types import Send
 from .state import OrchestraState, AgentStatus
 from .nodes.design_node import design_node
 from .nodes.publish_node import publish_node
+from .nodes.backend_node import backend_node
+from .nodes.frontend_node import frontend_node
+from .nodes.backlog_node import backlog_node
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +30,11 @@ logger = logging.getLogger(__name__)
 # Real implementations:
 #   - design_node (Prompt 07a + 07c): Uses Deep Agents with planning
 #   - publish_node (Prompt 07c): Uses Deep Agents with filesystem + GitHub tools
-# Stubs (BaseAgent pattern, no Deep Agents needed):
-#   - backend_agent, frontend_agent, backlog_agent, devops_agent
-#   (one-shot code generation, implemented in Prompt 07d-07f)
+#   - backend_node (Prompt 07d): Uses BaseAgent for C# + ASP.NET Core generation
+#   - frontend_node (Prompt 07d): Uses BaseAgent for React + TypeScript generation
+#   - backlog_node (Prompt 07d): Uses BaseAgent for product backlog generation
+# Stubs remaining:
+#   - knowledge_retrieval, integration_check, devops_agent
 
 async def knowledge_retrieval(state: OrchestraState) -> OrchestraState:
     """Retrieve relevant documentation/examples from knowledge base (RAG)."""
@@ -44,61 +49,8 @@ async def knowledge_retrieval(state: OrchestraState) -> OrchestraState:
     return state
 
 
-async def backend_agent(state: OrchestraState) -> OrchestraState:
-    """
-    Generate backend code (C# + ASP.NET Core) from design.
-
-    Deep Agents not used here: this node is a one-shot code generator.
-    BaseAgent abstraction (Prompt 07b) is sufficient.
-    Will be implemented in Prompt 07d.
-    """
-    logger.info("[backend_agent] running...")
-
-    state["current_step"] = "backend_agent"
-    state["completed_steps"].append("backend_agent")
-    state["agent_statuses"]["backend_agent"] = AgentStatus.COMPLETED
-
-    # Stub: in Prompt 07d this will populate state["backend_code"]
-    logger.info("[backend_agent] completed (stub)")
-    return state
-
-
-async def frontend_agent(state: OrchestraState) -> OrchestraState:
-    """
-    Generate frontend code (React + TypeScript) from design.
-
-    Deep Agents not used here: this node is a one-shot code generator.
-    BaseAgent abstraction (Prompt 07b) is sufficient.
-    Will be implemented in Prompt 07e.
-    """
-    logger.info("[frontend_agent] running...")
-
-    state["current_step"] = "frontend_agent"
-    state["completed_steps"].append("frontend_agent")
-    state["agent_statuses"]["frontend_agent"] = AgentStatus.COMPLETED
-
-    # Stub: in Prompt 07e this will populate state["frontend_code"]
-    logger.info("[frontend_agent] completed (stub)")
-    return state
-
-
-async def backlog_agent(state: OrchestraState) -> OrchestraState:
-    """
-    Generate product backlog (user stories, issues) from requirements.
-
-    Deep Agents not used here: this node is a one-shot code generator.
-    BaseAgent abstraction (Prompt 07b) is sufficient.
-    Will be implemented in Prompt 07d.
-    """
-    logger.info("[backlog_agent] running...")
-
-    state["current_step"] = "backlog_agent"
-    state["completed_steps"].append("backlog_agent")
-    state["agent_statuses"]["backlog_agent"] = AgentStatus.COMPLETED
-
-    # Stub: in Prompt 07d this will populate state["github_issues"]
-    logger.info("[backlog_agent] completed (stub)")
-    return state
+# backend_agent, frontend_agent, backlog_agent now use real implementations
+# Defined in AI_agents/graph/nodes/ (Prompt 07d)
 
 
 async def integration_check(state: OrchestraState) -> OrchestraState:
@@ -212,9 +164,9 @@ def create_graph() -> StateGraph:
     # Add all nodes
     graph.add_node("knowledge_retrieval", knowledge_retrieval)
     graph.add_node("design", design_node)
-    graph.add_node("backend_agent", backend_agent)
-    graph.add_node("frontend_agent", frontend_agent)
-    graph.add_node("backlog_agent", backlog_agent)
+    graph.add_node("backend_agent", backend_node)
+    graph.add_node("frontend_agent", frontend_node)
+    graph.add_node("backlog_agent", backlog_node)
     graph.add_node("integration_check", integration_check)
     graph.add_node("error_handler", error_handler)
     graph.add_node("devops_agent", devops_agent)
