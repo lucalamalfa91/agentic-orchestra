@@ -57,7 +57,9 @@
       "Bash(git restore:*)",
       "WebSearch",
       "Bash(pip search:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(setup)",
+      "Bash(requirements \")"
     ]
   }
 }

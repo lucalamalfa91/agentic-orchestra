@@ -1,22 +1,41 @@
-Your MVP description goes here.
+# Knowledge Agent Dependencies (Prompt 04)
+# MCP Server Dependencies (Prompt 05)
+# Add these to your project's requirements.txt
 
-Write a clear, detailed description of the application you want to generate.
+# Core ML/AI
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-anthropic>=0.2.0
+deepagents  # Deep Agents framework for multi-step agents (Prompt 07c)
+sentence-transformers>=2.2.0
+torch>=2.0.0  # Required by sentence-transformers
 
-Example:
-A weather app that shows the 7-day forecast for any city. Users can search by city name,
-see current temperature, precipitation chance, wind speed, and hourly breakdown. The app
-should be beautiful, responsive on mobile, and use free weather APIs.
+# Database
+asyncpg>=0.29.0
+pgvector>=0.2.0
 
-Features:
-- Search by city name
-- Display current temperature and conditions
-- Show 7-day forecast with daily high/low
-- Display precipitation and wind speed
-- Hourly breakdown for today
-- Responsive design for mobile
+# Web scraping
+httpx>=0.25.0
+beautifulsoup4>=4.12.0
 
-Technical:
-- Frontend: React
-- Backend: dotnet
-- Database: postgresql
-- Deploy to: railway
+# File processing
+pypdf>=3.17.0
+python-docx>=1.1.0
+
+# MCP Protocol
+mcp>=1.0.0
+
+# Integration APIs
+PyGithub>=2.1.0
+azure-devops>=7.0.0
+
+# Existing dependencies (if not already in your requirements.txt)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+cryptography>=41.0.0
+PyJWT>=2.8.0
+requests>=2.31.0

@@ -510,6 +510,39 @@ Blocker: None
 - ✅ Confirmation modals for destructive actions
 - ✅ Error handling with user-friendly messages
 
+### Cleanup — Legacy Files Removal (2026-04-10)
+**Removed 14 files (~950 lines of obsolete code)**
+
+**Legacy Orchestration (2 files, ~130 lines)**:
+- `run_all_agents.py` - subprocess-based orchestrator (replaced by AI_agents/graph/graph.py)
+- `AI_agents/ai_utils.py` - legacy utilities (replaced by AI_agents/utils/llm_client.py)
+
+**Legacy Agent Files (6 files, ~889 lines)**:
+- `AI_agents/architect_agent.py` (127 lines) → replaced by graph/nodes/design_node.py
+- `AI_agents/backend_agent.py` (84 lines) → replaced by graph/nodes/backend_node.py
+- `AI_agents/frontend_agent.py` (136 lines) → replaced by graph/nodes/frontend_node.py
+- `AI_agents/devops_agent.py` (35 lines) → replaced by graph/nodes/devops_node.py
+- `AI_agents/publish_agent.py` (173 lines) → replaced by graph/nodes/publish_node.py
+- `AI_agents/uxui_agent.py` (334 lines) → used only by run_all_agents.py, no LangGraph equivalent
+
+**Temporary Test Files (5 files)**:
+- `AI_agents/base_agent_test_demo.py` - BaseAgent validation demo (Prompt 07b)
+- `test_state_schema.py` - OrchestraState validation (Prompt 02)
+- `test_graph_structure.py` - Graph structure validation (Prompt 03)
+- `test_knowledge_imports.py` - Knowledge imports validation (Prompt 04)
+- `test_mcp_imports.py` - MCP imports validation (Prompt 05)
+
+**Requirements Consolidation**:
+- `requirements-knowledge.txt` merged into `requirements.txt`
+- Single source of truth for all project dependencies
+
+**Verification**:
+- ✅ No broken imports (verified with grep)
+- ✅ All Python files compile successfully (py_compile)
+- ✅ LLM client imports OK
+- ✅ All active code intact
+- ✅ 100% code deletion (no modifications to existing files)
+
 ## Next action
 Move to Prompt 10: Testing
 - End-to-end testing for full generation flow
