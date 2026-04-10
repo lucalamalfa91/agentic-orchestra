@@ -159,3 +159,26 @@ export interface DesignStateResponse {
 export interface DesignApprovalRequest {
   design_changes?: Record<string, any>;
 }
+
+// Knowledge Sources types
+export type KnowledgeSourceType = 'web' | 'file' | 'api';
+
+export interface KnowledgeSource {
+  id: string;
+  user_id: number;
+  name: string;
+  source_type: KnowledgeSourceType;
+  last_indexed_at: string | null;
+  created_at: string;
+}
+
+export interface KnowledgeSourceCreate {
+  name: string;
+  source_type: KnowledgeSourceType;
+  config: Record<string, any>;
+}
+
+export interface IndexingStatusResponse {
+  status: 'idle' | 'indexing' | 'completed' | 'failed';
+  message?: string;
+}

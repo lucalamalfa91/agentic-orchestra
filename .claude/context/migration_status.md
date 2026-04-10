@@ -14,13 +14,13 @@
 - [x] Prompt 07e — devops_agent node (using BaseAgent) ✓
 - [x] Prompt 07f — publish_agent node verification ✓
 - [x] Prompt 08 — Checkpoint + human-in-the-loop ✓
-- [ ] Prompt 09 — UI Knowledge Sources
+- [x] Prompt 09 — UI Knowledge Sources ✓
 - [ ] Prompt 10 — Testing
 
 ## Current step
-**Prompt 08 — Checkpoint + Human-in-the-Loop COMPLETED**
-Working on: Added PostgreSQL checkpointing and design approval flow
-Next: Prompt 09 — UI Knowledge Sources
+**Prompt 09 — UI Knowledge Sources COMPLETED**
+Working on: Frontend UI for managing knowledge sources (web, file, API)
+Next: Prompt 10 — Testing
 Blocker: None
 
 ## Decisions made
@@ -409,8 +409,109 @@ Blocker: None
 - ✅ API client methods added with correct type signatures
 - ✅ CORS headers included for all endpoints
 
+### Prompt 09 — UI Knowledge Sources (2026-04-10)
+- **orchestrator-ui/frontend/src/screens/KnowledgeSources/types.ts** - NEW (46 lines)
+  - TypeScript types: `KnowledgeSourceType`, `KnowledgeSource`, `WebSourceConfig`, `FileSourceConfig`, `ApiSourceConfig`
+  - `SourceConfig` union type for all source configurations
+  - `KnowledgeSourceCreate` request type, `IndexingStatus` response type
+- **orchestrator-ui/frontend/src/screens/KnowledgeSources/useKnowledgeSources.ts** - NEW (109 lines)
+  - `useSources()` hook - fetches sources list with loading/error states
+  - `useAddSource()` hook - creates new knowledge source
+  - `useDeleteSource()` hook - deletes source with confirmation
+  - `useIndexSource()` hook - triggers indexing + polls status every 2s until completed/failed
+  - Auto-cleanup polling after 5 minutes to prevent memory leaks
+- **orchestrator-ui/frontend/src/screens/KnowledgeSources/KnowledgeSourceCard.tsx** - NEW (311 lines)
+  - Displays source name, type badge (Web/File/API), last indexed date
+  - Status indicators: idle (no icon), indexing (spinner), completed (checkmark), failed (X)
+  - "Re-index" button triggers background indexing
+  - "Delete" button with glassmorphism confirmation modal
+  - Error messages displayed inline when indexing fails
+  - Hover effects with translateY(-2px) lift and glow shadow
+  - Disabled actions during indexing
+- **orchestrator-ui/frontend/src/screens/KnowledgeSources/AddSourceModal.tsx** - NEW (502 lines)
+  - Modal with source type selector (Web URL / Local Files / API Endpoint)
+  - **Web source form**: URL input, crawl depth slider (1-5), max pages input, optional CSS selector
+  - **File source form**: Drag-and-drop file upload (.pdf, .md, .txt, .docx), file list with remove buttons
+  - **API source form**: Endpoint URL, auth header name + value (with "stored encrypted" note)
+  - "Save & Index" button - saves then immediately triggers indexing
+  - "Save only" button - saves without indexing
+  - Form validation: name required, type-specific fields required
+  - Glassmorphism backdrop with click-outside-to-close
+- **orchestrator-ui/frontend/src/screens/KnowledgeSources/KnowledgeSourcesScreen.tsx** - NEW (182 lines)
+  - Header with gradient title + "Add Source" button
+  - Grid layout (1 col mobile, 2 cols tablet, 3 cols desktop) for source cards
+  - Empty state: "No sources yet" with icon, description, and "Add Your First Source" button
+  - Loading state: centered spinner
+  - Error state: red banner with error message
+  - Integrates all hooks: useSources, useAddSource, useDeleteSource, useIndexSource
+  - Refetches sources after add/delete operations
+- **orchestrator-ui/frontend/src/screens/KnowledgeSources/index.tsx** - NEW (4 lines)
+  - Barrel export for screen and types
+- **orchestrator-ui/frontend/src/types/index.ts** - UPDATED
+  - Added `KnowledgeSourceType`, `KnowledgeSource`, `KnowledgeSourceCreate`, `IndexingStatusResponse`
+  - Types mirror backend Pydantic schemas from Prompt 06
+- **orchestrator-ui/frontend/src/api/client.ts** - UPDATED
+  - Added `knowledgeApi` with 5 methods:
+    - `getSources()` - GET /api/knowledge/sources
+    - `createSource(data)` - POST /api/knowledge/sources
+    - `deleteSource(sourceId)` - DELETE /api/knowledge/sources/{id}
+    - `indexSource(sourceId)` - POST /api/knowledge/index/{id}
+    - `getIndexingStatus(sourceId)` - GET /api/knowledge/index/{id}/status
+  - All methods use axios instance with JWT token interceptor
+- **orchestrator-ui/frontend/src/screens/MVPCreationScreen.tsx** - UPDATED
+  - Added useEffect to fetch knowledge source count on mount
+  - Knowledge source context banner above main form:
+    - Green banner if sources exist: "Context sources active: N" with "Manage" link
+    - Red banner if no sources: "No knowledge sources configured — agents will work without context" with "Add sources" link
+    - Links to /knowledge route
+- **orchestrator-ui/frontend/src/App.tsx** - UPDATED
+  - Imported `KnowledgeSourcesScreen` component
+  - Added navigation tabs in header: "Create MVP" and "Knowledge Sources"
+  - Tab styling: active tab gets gradient background, inactive gets glass effect
+  - Moved main content into nested Routes for SPA navigation
+  - Route structure: `/` (MVP creation + history), `/knowledge` (knowledge sources screen)
+
+**Knowledge Sources Feature Design** (Prompt 09):
+- **Three source types supported**:
+  1. **Web**: Crawl documentation websites, configurable depth/pages/selectors
+  2. **File**: Upload local documents (.pdf, .md, .txt, .docx) with drag-and-drop
+  3. **API**: Fetch data from REST endpoints with optional auth headers
+- **UI/UX patterns**:
+  - Glassmorphism cards matching existing screens (DesignReviewScreen, MVPCreationScreen)
+  - Gradient backgrounds for primary actions (add source, save & index)
+  - Type badges with color coding: blue (web), green (file), purple (api)
+  - Status indicators with icons + colors (spinner, checkmark, X)
+  - Confirmation modals for destructive actions (delete)
+- **Indexing workflow**:
+  1. User creates source → saved to DB (config encrypted)
+  2. User clicks "Save & Index" or "Re-index" → triggers POST /api/knowledge/index/{id}
+  3. Frontend polls GET /api/knowledge/index/{id}/status every 2s
+  4. Status updates: indexing → completed/failed
+  5. Auto-stop polling after completion or 5-minute timeout
+- **Context integration**:
+  - MVPCreationScreen shows count of active knowledge sources
+  - Warning if no sources configured (agents work without context)
+  - Quick link to manage sources from creation screen
+- **Backend integration**:
+  - Uses existing API endpoints from Prompt 06 (knowledge.py router)
+  - All source configs encrypted before storage (encryption_service.py)
+  - Background indexing via FastAPI BackgroundTasks
+  - Vector store indexing via KnowledgeSource classes (Prompt 04)
+
+**Verification**:
+- ✅ All TypeScript types match backend Pydantic schemas
+- ✅ API client methods use correct endpoints from Prompt 06
+- ✅ Component styling follows existing patterns (glass cards, gradients, animations)
+- ✅ Navigation tabs integrated into App.tsx header
+- ✅ Knowledge source count displayed on MVP creation screen
+- ✅ Form validation prevents invalid submissions
+- ✅ Polling auto-cleanup prevents memory leaks
+- ✅ File upload with drag-and-drop UX
+- ✅ Confirmation modals for destructive actions
+- ✅ Error handling with user-friendly messages
+
 ## Next action
-Move to Prompt 09: UI Knowledge Sources
-- Frontend screens for managing knowledge sources (web, file, API)
-- Integration with backend knowledge API endpoints (from Prompt 06)
-- Connect to Knowledge Agent RAG workflow
+Move to Prompt 10: Testing
+- End-to-end testing for full generation flow
+- Integration tests for knowledge agent RAG
+- Unit tests for critical components

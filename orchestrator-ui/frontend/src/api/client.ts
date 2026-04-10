@@ -10,7 +10,10 @@ import type {
   ProjectRequirement,
   GenerationLog,
   DesignStateResponse,
-  DesignApprovalRequest
+  DesignApprovalRequest,
+  KnowledgeSource,
+  KnowledgeSourceCreate,
+  IndexingStatusResponse
 } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -175,6 +178,48 @@ export const configApi = {
    */
   async getAIProviderConfig(): Promise<{ is_configured: boolean; base_url?: string }> {
     const response = await api.get('/api/config/ai-provider');
+    return response.data;
+  },
+};
+
+export const knowledgeApi = {
+  /**
+   * Get all knowledge sources for current user.
+   */
+  async getSources(): Promise<KnowledgeSource[]> {
+    const response = await api.get<KnowledgeSource[]>('/api/knowledge/sources');
+    return response.data;
+  },
+
+  /**
+   * Create a new knowledge source.
+   */
+  async createSource(data: KnowledgeSourceCreate): Promise<KnowledgeSource> {
+    const response = await api.post<KnowledgeSource>('/api/knowledge/sources', data);
+    return response.data;
+  },
+
+  /**
+   * Delete a knowledge source.
+   */
+  async deleteSource(sourceId: string): Promise<{ message: string }> {
+    const response = await api.delete(`/api/knowledge/sources/${sourceId}`);
+    return response.data;
+  },
+
+  /**
+   * Trigger re-indexing of a knowledge source.
+   */
+  async indexSource(sourceId: string): Promise<{ message: string }> {
+    const response = await api.post(`/api/knowledge/index/${sourceId}`);
+    return response.data;
+  },
+
+  /**
+   * Get indexing status for a knowledge source.
+   */
+  async getIndexingStatus(sourceId: string): Promise<IndexingStatusResponse> {
+    const response = await api.get<IndexingStatusResponse>(`/api/knowledge/index/${sourceId}/status`);
     return response.data;
   },
 };

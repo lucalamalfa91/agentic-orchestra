@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/button';
 import PromptHero from '../components/form/PromptHero';
 import AdvancedSettings from '../components/form/AdvancedSettings';
 import GenerationProgressViewer from '../components/GenerationProgressViewer';
 import { useGeneration } from '../hooks/useGeneration';
+import { knowledgeApi } from '../api/client';
 
 export default function MVPCreationScreen() {
   const {
@@ -21,6 +22,16 @@ export default function MVPCreationScreen() {
   const [techStack, setTechStack] = useState({});
   const [formError, setFormError] = useState('');
   const [showViewer, setShowViewer] = useState(false);
+  const [knowledgeSourceCount, setKnowledgeSourceCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Fetch knowledge source count
+    knowledgeApi.getSources().then((sources) => {
+      setKnowledgeSourceCount(sources.length);
+    }).catch(() => {
+      setKnowledgeSourceCount(0);
+    });
+  }, []);
 
   const handleSubmit = async () => {
     if (prompt.length < 20) {
@@ -77,6 +88,59 @@ export default function MVPCreationScreen() {
           Describe your idea and get an MVP to test with users or pitch to clients
         </p>
       </div>
+
+      {/* Knowledge Source Context Info */}
+      {knowledgeSourceCount !== null && (
+        <div
+          className="glass-card p-4 flex items-center justify-between animate-slide-up"
+          style={{
+            background: knowledgeSourceCount === 0
+              ? 'rgba(239, 68, 68, 0.1)'
+              : 'rgba(16, 185, 129, 0.1)',
+            backdropFilter: 'blur(20px)',
+            border: `1px solid ${knowledgeSourceCount === 0 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              style={{
+                color: knowledgeSourceCount === 0 ? 'var(--color-error)' : 'var(--color-success)',
+              }}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <span
+              style={{
+                color: knowledgeSourceCount === 0 ? 'var(--color-error)' : 'var(--color-success)',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 600,
+              }}
+            >
+              {knowledgeSourceCount === 0
+                ? 'No knowledge sources configured — agents will work without context'
+                : `Context sources active: ${knowledgeSourceCount}`}
+            </span>
+          </div>
+          <a
+            href="/knowledge"
+            className="text-sm font-semibold underline hover:no-underline"
+            style={{
+              color: knowledgeSourceCount === 0 ? 'var(--color-error)' : 'var(--color-success)',
+            }}
+          >
+            {knowledgeSourceCount === 0 ? 'Add sources' : 'Manage'}
+          </a>
+        </div>
+      )}
 
       {/* Glass Card Container */}
       <div

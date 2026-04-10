@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AIProviderProvider } from './context/AIProviderContext';
 import { GenerationProvider } from './context/GenerationContext';
@@ -7,6 +7,7 @@ import AuthScreen from './screens/AuthScreen';
 import OAuthCallback from './screens/OAuthCallback';
 import AIProviderSetup from './screens/AIProviderSetup';
 import MVPCreationScreen from './screens/MVPCreationScreen';
+import KnowledgeSourcesScreen from './screens/KnowledgeSources';
 import ProgressIndicator from './components/ProgressIndicator';
 import ProjectHistory from './components/ProjectHistory';
 import { useGeneration } from './hooks/useGeneration';
@@ -16,8 +17,11 @@ import './App.css';
 function AppContent() {
   const { user, token } = useAuth();
   const { isGenerating, isCompleted } = useGeneration();
+  const location = useLocation();
 
   if (!token) return <Navigate to="/auth" />;
+
+  const isKnowledgePage = location.pathname === '/knowledge';
 
   return (
     <div className="min-h-screen animate-fade-in" style={{ background: 'var(--color-background)' }}>
@@ -54,21 +58,56 @@ function AppContent() {
               </div>
             )}
           </div>
+          {/* Navigation Tabs */}
+          <nav className="flex gap-4 mt-6">
+            <Link
+              to="/"
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all focus-ring"
+              style={{
+                background: !isKnowledgePage ? 'var(--gradient-primary)' : 'var(--color-glass)',
+                border: `1px solid ${!isKnowledgePage ? 'rgba(102, 126, 234, 0.5)' : 'var(--color-glass-border)'}`,
+                color: 'var(--color-text)',
+              }}
+            >
+              Create MVP
+            </Link>
+            <Link
+              to="/knowledge"
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all focus-ring"
+              style={{
+                background: isKnowledgePage ? 'var(--gradient-primary)' : 'var(--color-glass)',
+                border: `1px solid ${isKnowledgePage ? 'rgba(102, 126, 234, 0.5)' : 'var(--color-glass-border)'}`,
+                color: 'var(--color-text)',
+              }}
+            >
+              Knowledge Sources
+            </Link>
+          </nav>
         </div>
       </header>
 
       {/* Main Content with Premium Spacing */}
       <main className="max-w-7xl mx-auto px-6 py-12 space-y-8">
-        <div className="animate-scale-in">
-          {isGenerating ? (
-            <ProgressIndicator />
-          ) : (
-            <MVPCreationScreen />
-          )}
-        </div>
-        <div className="animate-slide-up">
-          <ProjectHistory />
-        </div>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                <div className="animate-scale-in">
+                  {isGenerating ? (
+                    <ProgressIndicator />
+                  ) : (
+                    <MVPCreationScreen />
+                  )}
+                </div>
+                <div className="animate-slide-up">
+                  <ProjectHistory />
+                </div>
+              </>
+            }
+          />
+          <Route path="/knowledge" element={<KnowledgeSourcesScreen />} />
+        </Routes>
       </main>
 
       {/* Luxury Footer */}
@@ -125,7 +164,7 @@ function AutoAuthWrapper() {
       <Route path="/auth" element={<AuthScreen />} />
       <Route path="/auth/callback" element={<OAuthCallback />} />
       <Route path="/provider-setup" element={<AIProviderSetup />} />
-      <Route path="/*" element={<AppContent />} />
+      <Route path="*" element={<AppContent />} />
     </Routes>
   );
 }
