@@ -135,19 +135,34 @@ def create_generation_log(
     project_id: Optional[int],
     step_name: str,
     status: str,
-    message: Optional[str] = None
+    message: Optional[str] = None,
+    generation_attempt: int = 1
 ) -> models.GenerationLog:
     """Create a generation log entry."""
     log = models.GenerationLog(
         project_id=project_id,
         step_name=step_name,
         status=status,
-        message=message
+        message=message,
+        generation_attempt=generation_attempt
     )
     db.add(log)
     db.commit()
     db.refresh(log)
     return log
+
+
+def increment_generation_attempt(db: Session, project_id: int) -> Optional[models.Project]:
+    """
+    Increment generation attempt counter for a project.
+    Called when resuming a failed generation.
+    """
+    project = get_project_by_id(db, project_id)
+    if project:
+        project.generation_attempt += 1
+        db.commit()
+        db.refresh(project)
+    return project
 
 
 def get_project_logs(db: Session, project_id: int) -> List[models.GenerationLog]:

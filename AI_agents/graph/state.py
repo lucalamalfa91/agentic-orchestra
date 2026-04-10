@@ -12,7 +12,8 @@ Design Principles:
 - Immutable data flow (agents return new state, don't mutate)
 """
 
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, Annotated
+import operator
 from enum import Enum
 
 
@@ -96,11 +97,13 @@ class OrchestraState(TypedDict):
 
     # Producer: Backlog Agent → Consumer: Project Manager, Requirements Agent
     # List of user stories/tasks
-    backlog_items: Optional[list]
+    # Annotated with operator.add to merge lists from parallel agents
+    backlog_items: Optional[Annotated[list, operator.add]]
 
     # Producer: Knowledge Agent (RAG) → Consumer: All agents
     # List of knowledge fragments injected into agent prompts
-    rag_context: Optional[list]
+    # Annotated with operator.add to merge RAG docs from parallel agents
+    rag_context: Optional[Annotated[list, operator.add]]
 
     # ===== ORCHESTRATION STATE =====
 

@@ -101,6 +101,16 @@ export const projectsApi = {
     });
     return response.data;
   },
+
+  /**
+   * Resume a failed generation with same requirements.
+   */
+  async resumeGeneration(projectId: number): Promise<GenerationStartResponse> {
+    const response = await api.post<GenerationStartResponse>(
+      `/api/projects/${projectId}/resume`
+    );
+    return response.data;
+  },
 };
 
 export const generationApi = {

@@ -23,6 +23,7 @@ export interface Project {
   github_repo_url?: string;
   status: string;
   created_at: string;
+  generation_attempt: number;
 }
 
 export interface ProjectRequirement {
@@ -57,6 +58,7 @@ export interface GenerationLog {
   status: string;
   message?: string;
   created_at: string;
+  generation_attempt: number;
 }
 
 export interface GenerationStatus {

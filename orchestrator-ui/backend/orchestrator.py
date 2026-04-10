@@ -233,6 +233,7 @@ class GenerationOrchestrator:
         request: schemas.GenerationRequest,
         db: Session,
         user_id: int = None,
+        existing_project_id: Optional[int] = None  # NEW: for resume mode
     ) -> Optional[int]:
         """
         Run LangGraph-based generation pipeline with WebSocket progress streaming.
@@ -242,39 +243,55 @@ class GenerationOrchestrator:
             request: User's generation request
             db: Database session
             user_id: User ID (optional, for token injection)
+            existing_project_id: Existing project ID for resume mode (optional)
 
         Returns:
             Project ID if successful, None if failed
         """
         project = None
+        generation_attempt = 1
 
         try:
-            # Create project record
-            project = crud.create_project(
-                db=db,
-                name=f"Generated App - {generation_id[:8]}",
-                description=request.mvp_description,
-                status="in_progress",
-            )
+            if existing_project_id:
+                # Resume mode: use existing project
+                project = crud.get_project_by_id(db, existing_project_id)
+                if not project:
+                    raise ValueError(f"Project {existing_project_id} not found")
+                generation_attempt = project.generation_attempt
+                # Don't recreate requirements, already exist
+                # But still write requirements file for agents
+                requirements = crud.get_project_requirements(db, existing_project_id)
+                if requirements:
+                    self.write_requirements_file(requirements.requirements_text)
+            else:
+                # New generation mode
+                # Create project record
+                project = crud.create_project(
+                    db=db,
+                    name=f"Generated App - {generation_id[:8]}",
+                    description=request.mvp_description,
+                    status="in_progress",
+                )
 
-            # Save requirements
-            requirements_text = self.generate_requirements_txt(request)
-            crud.create_project_requirement(
-                db=db,
-                project_id=project.id,
-                mvp_description=request.mvp_description,
-                features=request.features,
-                user_stories=request.user_stories,
-                tech_stack=request.tech_stack,
-                requirements_text=requirements_text,
-            )
-            self.write_requirements_file(requirements_text)
+                # Save requirements
+                requirements_text = self.generate_requirements_txt(request)
+                crud.create_project_requirement(
+                    db=db,
+                    project_id=project.id,
+                    mvp_description=request.mvp_description,
+                    features=request.features,
+                    user_stories=request.user_stories,
+                    tech_stack=request.tech_stack,
+                    requirements_text=requirements_text,
+                )
+                self.write_requirements_file(requirements_text)
 
             # Log start
             crud.create_generation_log(
                 db=db, project_id=project.id,
                 step_name="start", status="started",
                 message="Starting app generation with LangGraph",
+                generation_attempt=generation_attempt
             )
             await self.broadcast_progress(generation_id, "start", 0, 0, "Starting app generation...")
 
@@ -310,6 +327,7 @@ class GenerationOrchestrator:
                         db=db, project_id=project.id,
                         step_name=current_step, status="completed",
                         message=f"{current_step.capitalize()} step completed",
+                        generation_attempt=generation_attempt
                     )
                     await self.broadcast_progress(
                         generation_id,
@@ -337,6 +355,7 @@ class GenerationOrchestrator:
                     db=db, project_id=project.id,
                     step_name=current_step, status="failed",
                     message=error_summary[:500],
+                    generation_attempt=generation_attempt
                 )
                 await self.broadcast_progress(
                     generation_id, "error", 0, 0,
@@ -362,6 +381,7 @@ class GenerationOrchestrator:
                     db=db, project_id=project.id,
                     step_name="error", status="failed",
                     message=tb[:500],
+                    generation_attempt=generation_attempt
                 )
             await self.broadcast_progress(
                 generation_id, "error", 0, 0, f"Exception: {str(e)}"

@@ -32,6 +32,7 @@ class Project(Base):
     github_repo_url = Column(String(500))
     status = Column(String(50), default="completed")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    generation_attempt = Column(Integer, default=1, nullable=False)
 
     # Relationships
     requirements = relationship("ProjectRequirement", back_populates="project", cascade="all, delete-orphan")
@@ -77,6 +78,7 @@ class GenerationLog(Base):
     status = Column(String(50))  # 'started', 'in_progress', 'completed', 'failed'
     message = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    generation_attempt = Column(Integer, default=1, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="logs")

@@ -3,6 +3,7 @@
  */
 import React, { useState } from 'react';
 import type { Project } from '../types';
+import { projectsApi } from '../api/client';
 
 interface ProjectCardProps {
   project: Project;
@@ -276,31 +277,72 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onEdit, onViewProgre
         )}
 
         {project.status === 'failed' && (
-          <button
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="w-full px-3 py-2 text-xs font-semibold rounded-md"
-            style={{
-              background: 'rgba(239, 68, 68, 0.3)',
-              border: '1px solid rgba(239, 68, 68, 0.5)',
-              color: '#fca5a5',
-              cursor: isDeleting ? 'not-allowed' : 'pointer',
-              transition: 'all 0.3s',
-              opacity: isDeleting ? 0.5 : 1
-            }}
-            onMouseEnter={(e) => {
-              if (!isDeleting) {
-                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.5)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isDeleting) {
-                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
-              }
-            }}
-          >
-            {isDeleting ? 'Deleting...' : 'Delete'}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (window.confirm('Resume this generation with the same requirements?')) {
+                  try {
+                    setIsDeleting(true);  // Reuse loading state
+                    const response = await projectsApi.resumeGeneration(project.id);
+                    // Notify parent to show progress viewer
+                    onViewProgress?.(response.generation_id);
+                  } catch (err) {
+                    console.error('Failed to resume generation:', err);
+                    alert('Failed to resume generation. Check console for details.');
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }
+              }}
+              className="flex-1 px-3 py-2 text-xs font-semibold rounded-md"
+              style={{
+                background: 'rgba(34, 197, 94, 0.3)',
+                border: '1px solid rgba(34, 197, 94, 0.5)',
+                color: '#86efac',
+                cursor: 'pointer',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.5)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.3)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              ▶ Resume Generation
+            </button>
+
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="flex-1 px-3 py-2 text-xs font-semibold rounded-md"
+              style={{
+                background: 'rgba(239, 68, 68, 0.3)',
+                border: '1px solid rgba(239, 68, 68, 0.5)',
+                color: '#fca5a5',
+                cursor: isDeleting ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s',
+                opacity: isDeleting ? 0.5 : 1
+              }}
+              onMouseEnter={(e) => {
+                if (!isDeleting) {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.5)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isDeleting) {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }
+              }}
+            >
+              {isDeleting ? 'Processing...' : 'Delete'}
+            </button>
+          </div>
         )}
       </div>
     </div>

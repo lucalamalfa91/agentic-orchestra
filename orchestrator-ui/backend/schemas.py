@@ -51,6 +51,7 @@ class ProjectResponse(BaseModel):
     github_repo_url: Optional[str] = None
     status: str
     created_at: datetime
+    generation_attempt: int = 1
 
     class Config:
         from_attributes = True
@@ -76,6 +77,7 @@ class GenerationLogResponse(BaseModel):
     status: str
     message: Optional[str] = None
     created_at: datetime
+    generation_attempt: int = 1
 
     class Config:
         from_attributes = True

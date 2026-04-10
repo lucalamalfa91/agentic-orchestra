@@ -144,3 +144,90 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
         return {"status": "deleted", "project_id": project_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")
+
+
+@router.post("/{project_id}/resume", response_model=schemas.GenerationStartResponse)
+async def resume_generation(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Resume a failed generation by restarting with same requirements.
+
+    - Verifies project exists and status is 'failed'
+    - Fetches original requirements from database
+    - Increments generation_attempt counter
+    - Starts new generation with same requirements
+    - Returns new generation_id and WebSocket URL
+    """
+    # 1. Verify project exists and is failed
+    project = crud.get_project_by_id(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.status != "failed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can only resume failed projects (current status: {project.status})"
+        )
+
+    # 2. Get original requirements
+    requirements = crud.get_project_requirements(db, project_id)
+    if not requirements:
+        raise HTTPException(status_code=404, detail="Requirements not found")
+
+    # 3. Reconstruct GenerationRequest
+    import json
+    from orchestrator_ui.backend.schemas import GenerationRequest, TechStack
+
+    try:
+        request = GenerationRequest(
+            mvp_description=requirements.mvp_description,
+            features=json.loads(requirements.features),
+            user_stories=json.loads(requirements.user_stories) if requirements.user_stories else None,
+            tech_stack=TechStack(
+                frontend=requirements.frontend_framework or "react",
+                backend=requirements.backend_framework or "python",
+                database=requirements.database_type or "postgresql",
+                deploy_platform=requirements.deploy_platform or "vercel"
+            )
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reconstruct requirements: {str(e)}")
+
+    # 4. Increment generation attempt
+    crud.increment_generation_attempt(db, project_id)
+
+    # 5. Update status to in_progress
+    crud.update_project_status(db, project_id, "in_progress")
+
+    # 6. Log resume event
+    crud.create_generation_log(
+        db=db, project_id=project_id,
+        step_name="resume", status="started",
+        message=f"Resuming generation (attempt #{project.generation_attempt + 1})",
+        generation_attempt=project.generation_attempt + 1
+    )
+
+    # 7. Start generation in background
+    from orchestrator_ui.backend.orchestrator import GenerationOrchestrator, generate_id
+    import asyncio
+
+    generation_id = generate_id()
+    orchestrator = GenerationOrchestrator()
+
+    asyncio.create_task(
+        orchestrator.run_generation(
+            generation_id=generation_id,
+            request=request,
+            db=db,
+            user_id=None,  # TODO: Get from auth context if available
+            existing_project_id=project_id  # Pass existing project ID for resume mode
+        )
+    )
+
+    return schemas.GenerationStartResponse(
+        generation_id=generation_id,
+        message=f"Resuming generation for project {project.name} (attempt #{project.generation_attempt + 1})",
+        websocket_url=f"ws://localhost:8000/ws/generation/{generation_id}"
+    )

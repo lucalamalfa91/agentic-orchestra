@@ -65,7 +65,8 @@
       "Bash(npm --version:*)",
       "Bash(find:*)",
       "Bash(docker:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(alembic revision:*)"
     ]
   }
 }
