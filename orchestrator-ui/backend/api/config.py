@@ -75,40 +75,62 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
     try:
         print(f"[SAVE CONFIG] user_id={config_data.user_id}, provider={config_data.ai_provider}, base_url={config_data.base_url}")
 
-        # Find existing configuration
-        config = db.query(Configuration).filter(Configuration.user_id == config_data.user_id).first()
+        # Encrypt the API key
+        encrypted_key = encrypt(config_data.api_key)
 
-        if not config:
+        # Use raw SQL to bypass SQLAlchemy metadata cache
+        from sqlalchemy import text
+
+        # Check if configuration exists
+        existing = db.execute(
+            text("SELECT id FROM configurations WHERE user_id = :user_id LIMIT 1"),
+            {"user_id": config_data.user_id}
+        ).fetchone()
+
+        if not existing:
             # Create new configuration
             print(f"[SAVE CONFIG] Creating NEW configuration for user {config_data.user_id}")
-            config = Configuration(
-                user_id=config_data.user_id,
-                ai_base_url=config_data.base_url,
-                ai_api_key_encrypted=encrypt(config_data.api_key),
-                ai_provider=config_data.ai_provider,
-                is_active=True,
+            result = db.execute(
+                text("""INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active)
+                        VALUES (:user_id, :base_url, :api_key, :provider, 1)"""),
+                {
+                    "user_id": config_data.user_id,
+                    "base_url": config_data.base_url,
+                    "api_key": encrypted_key,
+                    "provider": config_data.ai_provider
+                }
             )
+            db.commit()
+            config_id = result.lastrowid
         else:
             # Update existing configuration
-            print(f"[SAVE CONFIG] Updating EXISTING configuration (id={config.id}) for user {config_data.user_id}")
-            config.ai_base_url = config_data.base_url
-            config.ai_api_key_encrypted = encrypt(config_data.api_key)
-            config.ai_provider = config_data.ai_provider
-            config.is_active = True
+            config_id = existing[0]
+            print(f"[SAVE CONFIG] Updating EXISTING configuration (id={config_id}) for user {config_data.user_id}")
+            db.execute(
+                text("""UPDATE configurations
+                        SET ai_base_url = :base_url,
+                            ai_api_key_encrypted = :api_key,
+                            ai_provider = :provider,
+                            is_active = 1
+                        WHERE user_id = :user_id"""),
+                {
+                    "base_url": config_data.base_url,
+                    "api_key": encrypted_key,
+                    "provider": config_data.ai_provider,
+                    "user_id": config_data.user_id
+                }
+            )
+            db.commit()
 
-        db.add(config)
-        db.commit()
-        db.refresh(config)
-
-        print(f"[SAVE CONFIG] ✓ Configuration saved successfully (id={config.id})")
-        return {"status": "saved", "user_id": config_data.user_id, "config_id": config.id}
+        print(f"[SAVE CONFIG] OK Configuration saved successfully (id={config_id})")
+        return {"status": "saved", "user_id": config_data.user_id, "config_id": config_id}
 
     except ValueError as e:
-        print(f"[SAVE CONFIG] ✗ Encryption error: {e}")
+        print(f"[SAVE CONFIG] X Encryption error: {e}")
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Encryption error: {str(e)}")
     except Exception as e:
-        print(f"[SAVE CONFIG] ✗ Failed to save: {e}")
+        print(f"[SAVE CONFIG] X Failed to save: {e}")
         import traceback
         traceback.print_exc()
         db.rollback()
@@ -209,7 +231,7 @@ def test_ai_provider(test_data: AIProviderTest):
         return {
             "success": True,
             "status_code": response.status_code,
-            "message": "✓ Connection successful! API key is valid.",
+            "message": "OK Connection successful! API key is valid.",
         }
 
     except requests.Timeout:
@@ -249,7 +271,7 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
     ).fetchone()
 
     if not result:
-        print(f"[TEST CURRENT] ✗ No active configuration found for user {user_id}")
+        print(f"[TEST CURRENT] X No active configuration found for user {user_id}")
         return {
             "success": False,
             "message": "No AI provider configured. Please save your settings first."
@@ -272,7 +294,7 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
         api_key = decrypt(api_key_encrypted)
         if not api_key or len(api_key) < 10:
             raise ValueError("Invalid or empty API key")
-        print(f"[TEST CURRENT] ✓ Successfully decrypted API key (length: {len(api_key)})")
+        print(f"[TEST CURRENT] OK Successfully decrypted API key (length: {len(api_key)})")
     except Exception as e:
         print(f"[TEST CURRENT] X Failed to decrypt API key: {e}")
         return {
@@ -329,7 +351,7 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
             except:
                 error_msg = response.text[:200]
 
-            print(f"[TEST CURRENT] ✗ Test failed: {error_msg}")
+            print(f"[TEST CURRENT] X Test failed: {error_msg}")
             return {
                 "success": False,
                 "status_code": response.status_code,
@@ -338,17 +360,17 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
                 "base_url": base_url
             }
 
-        print(f"[TEST CURRENT] ✓ Test successful!")
+        print(f"[TEST CURRENT] OK Test successful!")
         return {
             "success": True,
             "status_code": response.status_code,
-            "message": "✓ Connection successful! Your AI provider is working correctly.",
+            "message": "OK Connection successful! Your AI provider is working correctly.",
             "provider": ai_provider,
             "base_url": base_url
         }
 
     except requests.Timeout:
-        print(f"[TEST CURRENT] ✗ Request timeout")
+        print(f"[TEST CURRENT] X Request timeout")
         return {
             "success": False,
             "message": f"Request timeout - {base_url} is not responding",
@@ -356,7 +378,7 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
             "base_url": base_url
         }
     except requests.ConnectionError:
-        print(f"[TEST CURRENT] ✗ Connection error")
+        print(f"[TEST CURRENT] X Connection error")
         return {
             "success": False,
             "message": f"Connection error - cannot reach {base_url}",
@@ -366,7 +388,7 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        print(f"[TEST CURRENT] ✗ Unexpected error: {e}")
+        print(f"[TEST CURRENT] X Unexpected error: {e}")
         print(f"[TEST CURRENT] Traceback:\n{tb}")
         return {
             "success": False,
