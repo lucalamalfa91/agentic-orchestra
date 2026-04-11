@@ -68,7 +68,8 @@
       "Bash(done)",
       "Bash(alembic revision:*)",
       "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(bash:*)"
     ]
   }
 }

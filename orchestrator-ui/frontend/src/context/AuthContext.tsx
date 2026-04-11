@@ -15,8 +15,26 @@ export function AuthProvider({ children }: any) {
     }
   }, []);
 
+  // Alias for login - same as setToken
+  const login = useCallback((newToken: string) => {
+    handleSetToken(newToken);
+  }, [handleSetToken]);
+
+  // Logout - clear token and user
+  const logout = useCallback(() => {
+    handleSetToken(null);
+    setUser(null);
+  }, [handleSetToken]);
+
   return (
-    <AuthContext.Provider value={{ user, setUser, token, setToken: handleSetToken }}>
+    <AuthContext.Provider value={{
+      user,
+      setUser,
+      token,
+      setToken: handleSetToken,
+      login,
+      logout
+    }}>
       {children}
     </AuthContext.Provider>
   );

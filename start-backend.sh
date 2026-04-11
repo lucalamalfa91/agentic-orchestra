@@ -19,6 +19,13 @@ echo "✓ In project root: $(pwd)"
 export PYTHONPATH="$(pwd -W 2>/dev/null || pwd)"
 echo "✓ PYTHONPATH set to: $PYTHONPATH"
 
+# Add GitHub CLI to PATH (if not already there)
+GH_CLI_PATH="/c/Program Files/GitHub CLI"
+if [ -d "$GH_CLI_PATH" ] && [[ ":$PATH:" != *":$GH_CLI_PATH:"* ]]; then
+    export PATH="$GH_CLI_PATH:$PATH"
+    echo "✓ Added GitHub CLI to PATH"
+fi
+
 # Navigate to backend directory
 cd orchestrator-ui/backend
 echo "✓ Changed to backend directory"

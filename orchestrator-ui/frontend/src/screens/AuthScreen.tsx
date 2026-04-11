@@ -9,9 +9,16 @@ export default function AuthScreen() {
   const { token, login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     if (token) navigate('/');
+
+    // Check if redirected due to session expiration
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('session_expired') === 'true') {
+      setSessionExpired(true);
+    }
   }, [token, navigate]);
 
   const handleGitHubLogin = async () => {
@@ -35,7 +42,20 @@ export default function AuthScreen() {
         setError('GitHub authentication not available');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to initiate login');
+      // Parse error message for better UX
+      const errorText = err.message || 'Failed to initiate login';
+
+      if (errorText.includes('Bad credentials') || errorText.includes('401')) {
+        setError(
+          'GitHub CLI authentication expired. Please run: gh auth refresh'
+        );
+      } else if (errorText.includes('gh CLI not authenticated')) {
+        setError(
+          'GitHub CLI not configured. Please run: gh auth login'
+        );
+      } else {
+        setError(errorText);
+      }
       console.error(err);
     } finally {
       setLoading(false);
@@ -109,6 +129,22 @@ export default function AuthScreen() {
           Turn business ideas into working prototypes. Test concepts, build mockups, and pitch MVPs to clients
         </p>
 
+        {/* Session Expired Warning */}
+        {sessionExpired && (
+          <div
+            className="mb-6 p-4 rounded-lg animate-slide-up"
+            style={{
+              background: 'rgba(251, 191, 36, 0.1)',
+              border: '1px solid rgba(251, 191, 36, 0.3)',
+              color: '#fbbf24',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 500
+            }}
+          >
+            ⚠️ Your session has expired. Please log in again.
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div
@@ -120,7 +156,21 @@ export default function AuthScreen() {
               fontSize: 'var(--font-size-sm)'
             }}
           >
-            {error}
+            <div className="font-semibold mb-2">Authentication Failed</div>
+            <div>{error}</div>
+            {error.includes('gh auth') && (
+              <div className="mt-3 p-3 rounded" style={{ background: 'rgba(0, 0, 0, 0.2)' }}>
+                <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  Open a terminal and run:
+                </div>
+                <code className="block mt-1 text-xs" style={{ color: '#fbbf24' }}>
+                  {error.includes('refresh') ? 'gh auth refresh' : 'gh auth login'}
+                </code>
+                <div className="text-xs mt-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  Then click the button above again.
+                </div>
+              </div>
+            )}
           </div>
         )}
 

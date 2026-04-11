@@ -84,7 +84,12 @@ def github_login_with_gh(db: Session = Depends(get_db)):
         )
 
         if result.returncode != 0:
-            raise HTTPException(status_code=401, detail="gh CLI not authenticated. Run: gh auth login")
+            # Extract meaningful error from stderr
+            error_msg = result.stderr.strip() if result.stderr else "gh CLI not authenticated"
+            raise HTTPException(
+                status_code=401,
+                detail=f"gh CLI authentication failed: {error_msg}. Please run 'gh auth login' or 'gh auth refresh'"
+            )
 
         # Parse gh output (format: "username\nuser_id")
         lines = result.stdout.strip().split("\n")

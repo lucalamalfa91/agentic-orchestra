@@ -50,6 +50,22 @@ api.interceptors.response.use(
       message: error.message,
       code: error.code,
     });
+
+    // Handle 401 Unauthorized - token expired or invalid
+    if (error.response?.status === 401) {
+      // Clear invalid token
+      localStorage.removeItem('jwt_token');
+
+      // Only redirect if not already on auth page
+      if (!window.location.pathname.startsWith('/auth')) {
+        // Store intended destination for redirect after login
+        sessionStorage.setItem('auth_redirect', window.location.pathname);
+
+        // Redirect to auth page
+        window.location.href = '/auth?session_expired=true';
+      }
+    }
+
     return Promise.reject(error);
   }
 );
