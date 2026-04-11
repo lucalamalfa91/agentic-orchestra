@@ -302,6 +302,77 @@ async def reject_design(
         )
 
 
+@router.post("/{project_id}/cancel")
+async def cancel_generation(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Cancel an in-progress generation.
+
+    Stops execution, marks project as failed, and closes WebSocket connection.
+
+    Args:
+        project_id: Project ID
+        db: Database session
+
+    Returns:
+        Success message
+    """
+    try:
+        # Verify project exists
+        project = crud.get_project_by_id(db, int(project_id))
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Only allow cancelling in-progress generations
+        if project.status != "in_progress":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Can only cancel in-progress projects (current status: {project.status})"
+            )
+
+        # Update project status to failed
+        crud.update_project_status(db, int(project_id), "failed")
+
+        # Log cancellation
+        crud.create_generation_log(
+            db=db,
+            project_id=int(project_id),
+            step_name="generation_control",
+            status="cancelled",
+            message="Generation cancelled by user",
+            generation_attempt=project.generation_attempt
+        )
+
+        # Broadcast cancellation to close WebSocket gracefully
+        await manager.broadcast(project_id, {
+            "type": "cancelled",
+            "step": "generation_cancelled",
+            "message": "Generation cancelled by user"
+        })
+
+        logger.info(f"Generation cancelled for project {project_id}")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Generation cancelled successfully",
+                "project_id": project_id
+            },
+            headers=CORS_HEADERS
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling generation for project {project_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel generation: {str(e)}"
+        )
+
+
 # ============================================================================
 # CORS preflight handlers
 # ============================================================================
@@ -321,4 +392,10 @@ async def options_approve():
 @router.options("/{project_id}/reject")
 async def options_reject():
     """CORS preflight handler for reject endpoint."""
+    return JSONResponse(status_code=200, content={}, headers=CORS_HEADERS)
+
+
+@router.options("/{project_id}/cancel")
+async def options_cancel():
+    """CORS preflight handler for cancel endpoint."""
     return JSONResponse(status_code=200, content={}, headers=CORS_HEADERS)

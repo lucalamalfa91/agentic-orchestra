@@ -12,6 +12,7 @@ import json
 from typing import List
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 try:
@@ -28,6 +29,12 @@ except ModuleNotFoundError:
 
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
+
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+}
 
 # Global dict to track indexing status (in production, use Redis or database)
 # Format: {source_id: {"status": "indexing"|"completed"|"failed", "message": str}}
@@ -122,6 +129,12 @@ def perform_indexing(source_id: str, user_id: int):
         }
     finally:
         db.close()
+
+
+@router.options("/sources")
+async def options_sources():
+    """CORS preflight handler for sources endpoint."""
+    return JSONResponse(status_code=200, content={}, headers=CORS_HEADERS)
 
 
 @router.get("/sources", response_model=List[schemas.KnowledgeSourceResponse])

@@ -1,10 +1,11 @@
 # Agentic Orchestra — Project Memory
 
 ## ⚡ START OF EVERY SESSION — do this first
-1. Read `.claude/context/migration_status.md`
+1. Read `.claude/context`
 2. Tell me: what step we are on, what files exist, any open blockers
 3. Ask me which task to work on if not clear from the status file
 Do not write any code before completing steps 1-3.
+4. Before /clear execution, wrote the actual state in the context folder
 
 ---
 

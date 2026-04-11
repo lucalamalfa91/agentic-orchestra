@@ -2,7 +2,7 @@
  * Project history component showing all generated apps.
  */
 import React, { useEffect, useState } from 'react';
-import { projectsApi } from '../api/client';
+import { projectsApi, generationControlApi } from '../api/client';
 import type { Project } from '../types';
 import ProjectCard from './ProjectCard';
 import GenerationProgressViewer from './GenerationProgressViewer';
@@ -60,19 +60,17 @@ const ProjectHistory: React.FC<ProjectHistoryProps> = ({ onEdit, refreshTrigger 
   };
 
   const handleStopGeneration = async (projectId: string) => {
-    if (window.confirm('Stop generation for this project?')) {
-      try {
-        await fetch(`http://localhost:8000/api/generation/${projectId}/cancel`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('jwt_token')}`,
-          },
-        });
-        fetchProjects(); // Refresh list
-      } catch (err) {
-        console.error('Failed to stop generation:', err);
-        alert('Failed to stop generation');
-      }
+    if (!window.confirm('Stop generation for this project?')) {
+      return;
+    }
+
+    try {
+      await generationControlApi.cancelGeneration(projectId);
+      await fetchProjects(); // Refresh list
+    } catch (err: any) {
+      console.error('Failed to stop generation:', err);
+      const errorMessage = err?.response?.data?.detail || 'Failed to stop generation. Please try again.';
+      alert(errorMessage);
     }
   };
 

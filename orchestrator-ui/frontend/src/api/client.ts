@@ -148,6 +148,14 @@ export const generationControlApi = {
     const response = await api.post(`/api/generation/${projectId}/reject`);
     return response.data;
   },
+
+  /**
+   * Cancel an in-progress generation.
+   */
+  async cancelGeneration(projectId: string): Promise<{ message: string }> {
+    const response = await api.post(`/api/generation/${projectId}/cancel`);
+    return response.data;
+  },
 };
 
 export const authApi = {

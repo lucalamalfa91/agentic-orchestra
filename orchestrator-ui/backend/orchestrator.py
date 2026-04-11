@@ -6,11 +6,16 @@ The WebSocket message format is preserved for frontend compatibility.
 """
 import asyncio
 import json
+import logging
 import os
+import traceback
 import uuid
 from pathlib import Path
 from typing import Optional, AsyncIterator
 from sqlalchemy.orm import Session
+from pydantic import ValidationError
+
+logger = logging.getLogger(__name__)
 
 try:
     from orchestrator_ui.backend import crud, schemas
@@ -20,6 +25,9 @@ try:
     from AI_agents.graph.graph import app as langgraph_app
     from AI_agents.graph.state import OrchestraState, AgentStatus
 except ModuleNotFoundError:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     import crud
     import schemas
     from websocket import manager
@@ -233,7 +241,8 @@ class GenerationOrchestrator:
         request: schemas.GenerationRequest,
         db: Session,
         user_id: int = None,
-        existing_project_id: Optional[int] = None  # NEW: for resume mode
+        existing_project_id: Optional[int] = None,  # NEW: for resume mode
+        timeout_seconds: int = 1800  # 30 minutes default timeout
     ) -> Optional[int]:
         """
         Run LangGraph-based generation pipeline with WebSocket progress streaming.
@@ -244,12 +253,76 @@ class GenerationOrchestrator:
             db: Database session
             user_id: User ID (optional, for token injection)
             existing_project_id: Existing project ID for resume mode (optional)
+            timeout_seconds: Maximum generation time in seconds (default 30 min)
 
         Returns:
             Project ID if successful, None if failed
         """
         project = None
         generation_attempt = 1
+
+        try:
+            # Wrap entire generation in timeout
+            return await asyncio.wait_for(
+                self._run_generation_internal(
+                    generation_id, request, db, user_id, existing_project_id, generation_attempt
+                ),
+                timeout=timeout_seconds
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"Generation {generation_id} timed out after {timeout_seconds}s")
+            if project:
+                crud.update_project_status(db, project.id, "failed")
+                crud.create_generation_log(
+                    db=db, project_id=project.id,
+                    step_name="error", status="failed",
+                    message=f"Generation timed out after {timeout_seconds} seconds",
+                    generation_attempt=generation_attempt
+                )
+            await self._close_websocket_gracefully(generation_id, 1011, "Generation timed out")
+            return None
+        except ValidationError as e:
+            logger.error(f"Validation error in generation {generation_id}: {e}")
+            if project:
+                crud.update_project_status(db, project.id, "failed")
+                crud.create_generation_log(
+                    db=db, project_id=project.id,
+                    step_name="error", status="failed",
+                    message=f"Validation error: {str(e)[:500]}",
+                    generation_attempt=generation_attempt
+                )
+            await self._close_websocket_gracefully(generation_id, 1011, "Validation error")
+            return None
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.error(f"Exception during generation {generation_id}:\n{tb}")
+            if project:
+                try:
+                    crud.update_project_status(db, project.id, "failed")
+                    crud.create_generation_log(
+                        db=db, project_id=project.id,
+                        step_name="error", status="failed",
+                        message=tb[:500],
+                        generation_attempt=generation_attempt
+                    )
+                    db.commit()
+                except Exception as db_error:
+                    logger.error(f"Failed to save error state to DB: {db_error}")
+                    db.rollback()
+            await self._close_websocket_gracefully(generation_id, 1011, f"Internal error: {str(e)[:100]}")
+            return None
+
+    async def _run_generation_internal(
+        self,
+        generation_id: str,
+        request: schemas.GenerationRequest,
+        db: Session,
+        user_id: Optional[int],
+        existing_project_id: Optional[int],
+        generation_attempt: int
+    ) -> Optional[int]:
+        """Internal generation logic without timeout wrapper."""
+        project = None
 
         try:
             if existing_project_id:
