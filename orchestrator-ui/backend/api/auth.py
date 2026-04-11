@@ -3,6 +3,7 @@ Authentication API endpoints for OAuth integrations.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 import jwt
 import os
 import requests
@@ -255,6 +256,200 @@ def github_status(user_id: int, db: Session = Depends(get_db)):
         "connected": user is not None,
         "username": user.github_username if user else None,
     }
+
+
+@router.post("/github/device-flow/start")
+def start_device_flow():
+    """
+    Start GitHub Device Flow authentication using GitHub REST API.
+    No gh CLI required!
+
+    Returns device_code, user_code, and verification_uri.
+    """
+    try:
+        # GitHub CLI's public client_id for device flow
+        # This is public and safe to use - it's in gh CLI source code
+        client_id = "178c6fc778ccc68e1d6a"
+
+        # Start device flow with GitHub API
+        response = requests.post(
+            "https://github.com/login/device/code",
+            headers={
+                "Accept": "application/json",
+            },
+            json={
+                "client_id": client_id,
+                "scope": "repo read:org gist"
+            }
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"GitHub API error: {response.text}"
+            )
+
+        data = response.json()
+
+        return {
+            "device_code": data["device_code"],
+            "user_code": data["user_code"],
+            "verification_uri": data["verification_uri"],
+            "expires_in": data["expires_in"],
+            "interval": data.get("interval", 5)
+        }
+
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"GitHub API request failed: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start device flow: {str(e)}")
+
+
+class DeviceFlowPollRequest(BaseModel):
+    device_code: str
+
+
+@router.post("/github/device-flow/poll")
+def poll_device_flow(request: DeviceFlowPollRequest, db: Session = Depends(get_db)):
+    """
+    Poll to check if device flow authentication is complete.
+    Returns JWT token if authentication succeeded.
+
+    Args:
+        device_code: The device_code from start_device_flow
+    """
+    try:
+        client_id = "178c6fc778ccc68e1d6a"
+
+        # Poll GitHub for access token
+        response = requests.post(
+            "https://github.com/login/oauth/access_token",
+            headers={
+                "Accept": "application/json",
+            },
+            json={
+                "client_id": client_id,
+                "device_code": request.device_code,
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
+            }
+        )
+
+        if response.status_code != 200:
+            return {"status": "error", "message": f"GitHub API error: {response.status_code}"}
+
+        data = response.json()
+
+        # Debug logging
+        print(f"[POLL] GitHub response: {data}")
+
+        # Check for errors
+        if "error" in data:
+            error_code = data["error"]
+            print(f"[POLL] Error from GitHub: {error_code}")
+            if error_code == "authorization_pending":
+                return {"status": "pending", "message": "Waiting for authorization..."}
+            elif error_code == "slow_down":
+                # GitHub wants us to slow down - return new interval
+                new_interval = data.get("interval", 5)
+                return {
+                    "status": "pending",
+                    "message": "Polling too fast, slowing down...",
+                    "interval": new_interval
+                }
+            elif error_code == "expired_token":
+                return {"status": "error", "message": "Code expired. Please try again."}
+            elif error_code == "access_denied":
+                return {"status": "error", "message": "Access denied by user."}
+            else:
+                return {"status": "error", "message": f"GitHub error: {error_code}"}
+
+        # Success! Got access token
+        github_token = data["access_token"]
+        print(f"[POLL] SUCCESS! Got access token, creating session...")
+
+        # Get user info from GitHub API
+        user_response = requests.get(
+            "https://api.github.com/user",
+            headers={
+                "Authorization": f"Bearer {github_token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28"
+            }
+        )
+
+        if user_response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Failed to get user info from GitHub")
+
+        user_data = user_response.json()
+        username = user_data["login"]
+        github_id = str(user_data["id"])
+
+        # Create or update user in database
+        user = db.query(User).filter(User.github_id == str(github_id)).first()
+
+        if not user:
+            user = User(
+                github_id=str(github_id),
+                github_username=username,
+                github_token=github_token,
+            )
+            db.add(user)
+        else:
+            user.github_token = github_token
+
+        db.commit()
+        db.refresh(user)
+
+        # Auto-configure AI provider from env vars if available
+        ai_base_url = os.getenv("ADESSO_BASE_URL", "").strip()
+        ai_api_key = os.getenv("ADESSO_AI_HUB_KEY", "").strip()
+
+        if ai_base_url and ai_api_key:
+            # Note: Using raw SQL to bypass SQLAlchemy metadata cache issue
+            from sqlalchemy import text
+            config_result = db.execute(
+                text("SELECT id FROM configurations WHERE user_id = :user_id LIMIT 1"),
+                {"user_id": user.id}
+            ).fetchone()
+
+            if not config_result:
+                # Create new config using raw SQL
+                db.execute(
+                    text("INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active) VALUES (:user_id, :base_url, :api_key, 'custom', 1)"),
+                    {"user_id": user.id, "base_url": ai_base_url, "api_key": encrypt(ai_api_key)}
+                )
+            else:
+                # Update existing config
+                db.execute(
+                    text("UPDATE configurations SET is_active = 1 WHERE user_id = :user_id"),
+                    {"user_id": user.id}
+                )
+            db.commit()
+
+        # Generate JWT token
+        jwt_secret = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
+        jwt_token = jwt.encode(
+            {
+                "user_id": user.id,
+                "username": user.github_username,
+                "exp": datetime.utcnow() + timedelta(days=7),
+            },
+            jwt_secret,
+            algorithm="HS256",
+        )
+
+        return {
+            "status": "complete",
+            "token": jwt_token,
+            "user_id": user.id,
+            "username": user.github_username
+        }
+
+    except Exception as e:
+        import traceback
+        print(f"ERROR in poll_device_flow: {e}")
+        print(traceback.format_exc())
+        return {"status": "error", "message": str(e)}
 
 
 @router.get("/deploy/{provider}/login")
