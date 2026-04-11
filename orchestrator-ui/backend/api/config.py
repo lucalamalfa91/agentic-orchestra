@@ -241,34 +241,44 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
     print(f"[TEST CURRENT] Testing AI config for user_id={user_id}")
 
     # Get user's active configuration
-    config = db.query(Configuration).filter(
-        Configuration.user_id == user_id,
-        Configuration.is_active == True
-    ).first()
+    # Note: NOT using ai_provider column due to SQLAlchemy cache issues - deduce from base_url instead
+    from sqlalchemy import text
+    result = db.execute(
+        text("SELECT id, user_id, ai_base_url, ai_api_key_encrypted FROM configurations WHERE user_id = :user_id AND is_active = 1 LIMIT 1"),
+        {"user_id": user_id}
+    ).fetchone()
 
-    if not config:
+    if not result:
         print(f"[TEST CURRENT] ✗ No active configuration found for user {user_id}")
         return {
             "success": False,
             "message": "No AI provider configured. Please save your settings first."
         }
 
+    config_id, user_id_db, base_url, api_key_encrypted = result
+
+    # Deduce provider from base_url
+    if "anthropic.com" in base_url.lower():
+        ai_provider = "anthropic"
+    elif "openai.com" in base_url.lower():
+        ai_provider = "openai"
+    else:
+        ai_provider = "custom"
+
+    print(f"[TEST CURRENT] Found config: id={config_id}, provider={ai_provider} (deduced), base_url={base_url}")
+
     # Decrypt API key
     try:
-        api_key = decrypt(config.ai_api_key_encrypted)
+        api_key = decrypt(api_key_encrypted)
         if not api_key or len(api_key) < 10:
             raise ValueError("Invalid or empty API key")
         print(f"[TEST CURRENT] ✓ Successfully decrypted API key (length: {len(api_key)})")
     except Exception as e:
-        print(f"[TEST CURRENT] ✗ Failed to decrypt API key: {e}")
+        print(f"[TEST CURRENT] X Failed to decrypt API key: {e}")
         return {
             "success": False,
             "message": f"Failed to decrypt API key: {str(e)}. Please re-save your configuration."
         }
-
-    # Get provider (with fallback for older DBs)
-    ai_provider = getattr(config, 'ai_provider', 'openai')
-    base_url = config.ai_base_url
 
     print(f"[TEST CURRENT] Testing provider={ai_provider}, base_url={base_url}")
 
