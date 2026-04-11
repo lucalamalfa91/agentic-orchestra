@@ -144,14 +144,18 @@ class GenerationOrchestrator:
                 else:
                     print(f"[DEBUG] Using official Anthropic API (api.anthropic.com)")
 
-            elif ai_provider == "openai":
-                # OpenAI or OpenAI-compatible (like Adesso AI Hub)
+            elif ai_provider == "openai" or ai_provider == "custom":
+                # OpenAI, OpenAI-compatible, or Custom AI Hub (like LiteLLM, Adesso)
                 os.environ["OPENAI_API_KEY"] = api_key
                 print(f"[DEBUG] Set OPENAI_API_KEY = {api_key[:10]}...{api_key[-4:]}")
-                # Set base_url for OpenAI-compatible providers
-                if "openai.com" not in config.ai_base_url.lower():
+
+                # For custom providers, always set base URL
+                # For OpenAI, only set if not official API
+                if ai_provider == "custom" or "openai.com" not in config.ai_base_url.lower():
                     os.environ["OPENAI_BASE_URL"] = config.ai_base_url
                     print(f"[DEBUG] Set OPENAI_BASE_URL = {config.ai_base_url}")
+                    if ai_provider == "custom":
+                        print(f"[INFO] Using custom AI hub/proxy: {config.ai_base_url}")
 
             # Legacy support: also set ADESSO_* env vars for backwards compatibility
             os.environ["ADESSO_BASE_URL"] = config.ai_base_url

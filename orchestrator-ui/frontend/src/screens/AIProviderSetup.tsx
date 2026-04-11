@@ -8,7 +8,7 @@ import { useAuth } from '../hooks/useAuth';
 export default function AIProviderSetup() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [provider, setProvider] = useState<'openai' | 'anthropic'>('anthropic');
+  const [provider, setProvider] = useState<'openai' | 'anthropic' | 'custom'>('anthropic');
   const [baseUrl, setBaseUrl] = useState('https://api.anthropic.com');
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -16,12 +16,15 @@ export default function AIProviderSetup() {
   const [message, setMessage] = useState('');
 
   // Update base URL when provider changes
-  const handleProviderChange = (newProvider: 'openai' | 'anthropic') => {
+  const handleProviderChange = (newProvider: 'openai' | 'anthropic' | 'custom') => {
     setProvider(newProvider);
     if (newProvider === 'anthropic') {
       setBaseUrl('https://api.anthropic.com');
-    } else {
+    } else if (newProvider === 'openai') {
       setBaseUrl('https://api.openai.com/v1');
+    } else {
+      // Custom - leave URL as is or clear it
+      setBaseUrl('');
     }
   };
 
@@ -111,10 +114,10 @@ export default function AIProviderSetup() {
             >
               AI Provider
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <button
                 onClick={() => handleProviderChange('anthropic')}
-                className="p-4 rounded-lg transition-all focus-ring"
+                className="p-3 rounded-lg transition-all focus-ring"
                 style={{
                   background: provider === 'anthropic' ? 'var(--gradient-primary)' : 'rgba(255, 255, 255, 0.05)',
                   border: `1px solid ${provider === 'anthropic' ? 'rgba(102, 126, 234, 0.5)' : 'rgba(255, 255, 255, 0.2)'}`,
@@ -125,15 +128,15 @@ export default function AIProviderSetup() {
               >
                 <div className="text-center">
                   <div className="text-lg mb-1">🤖</div>
-                  <div>Anthropic</div>
+                  <div className="text-sm">Anthropic</div>
                   <div className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>
-                    Claude API
+                    Claude
                   </div>
                 </div>
               </button>
               <button
                 onClick={() => handleProviderChange('openai')}
-                className="p-4 rounded-lg transition-all focus-ring"
+                className="p-3 rounded-lg transition-all focus-ring"
                 style={{
                   background: provider === 'openai' ? 'var(--gradient-primary)' : 'rgba(255, 255, 255, 0.05)',
                   border: `1px solid ${provider === 'openai' ? 'rgba(102, 126, 234, 0.5)' : 'rgba(255, 255, 255, 0.2)'}`,
@@ -144,9 +147,28 @@ export default function AIProviderSetup() {
               >
                 <div className="text-center">
                   <div className="text-lg mb-1">✨</div>
-                  <div>OpenAI</div>
+                  <div className="text-sm">OpenAI</div>
                   <div className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>
-                    GPT API
+                    GPT
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleProviderChange('custom')}
+                className="p-3 rounded-lg transition-all focus-ring"
+                style={{
+                  background: provider === 'custom' ? 'var(--gradient-primary)' : 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${provider === 'custom' ? 'rgba(102, 126, 234, 0.5)' : 'rgba(255, 255, 255, 0.2)'}`,
+                  color: 'var(--color-text)',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <div className="text-center">
+                  <div className="text-lg mb-1">🔌</div>
+                  <div className="text-sm">Custom</div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                    Hub/Proxy
                   </div>
                 </div>
               </button>
@@ -160,11 +182,22 @@ export default function AIProviderSetup() {
               style={{ color: 'var(--color-text-secondary)' }}
             >
               Base URL
+              {provider === 'custom' && (
+                <span className="ml-2 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                  (e.g., LiteLLM proxy, Adesso Hub)
+                </span>
+              )}
             </label>
             <Input
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.openai.com/v1"
+              placeholder={
+                provider === 'anthropic'
+                  ? 'https://api.anthropic.com'
+                  : provider === 'openai'
+                  ? 'https://api.openai.com/v1'
+                  : 'https://your-proxy.com/v1'
+              }
               className="input-glass w-full focus-ring"
               style={{
                 background: 'rgba(255, 255, 255, 0.05)',
@@ -175,6 +208,11 @@ export default function AIProviderSetup() {
                 fontSize: 'var(--font-size-base)'
               }}
             />
+            {provider === 'custom' && (
+              <p className="text-xs mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                💡 Enter the base URL of your AI hub/proxy (LiteLLM, Adesso, etc.)
+              </p>
+            )}
           </div>
 
           {/* API Key Input */}
@@ -184,13 +222,24 @@ export default function AIProviderSetup() {
               style={{ color: 'var(--color-text-secondary)' }}
             >
               API Key
+              {provider === 'anthropic' && (
+                <span className="ml-2 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                  (starts with sk-ant-...)
+                </span>
+              )}
             </label>
             <div className="flex gap-2">
               <Input
                 type={showKey ? 'text' : 'password'}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-..."
+                placeholder={
+                  provider === 'anthropic'
+                    ? 'sk-ant-api-...'
+                    : provider === 'openai'
+                    ? 'sk-...'
+                    : 'Your hub token'
+                }
                 className="input-glass flex-1 focus-ring"
                 style={{
                   background: 'rgba(255, 255, 255, 0.05)',
