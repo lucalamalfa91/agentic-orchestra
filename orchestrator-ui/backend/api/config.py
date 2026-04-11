@@ -218,3 +218,149 @@ def test_ai_provider(test_data: AIProviderTest):
         return {"success": False, "message": "Connection error - cannot reach provider"}
     except Exception as e:
         return {"success": False, "message": f"Test failed: {str(e)}"}
+
+
+@router.get("/ai-provider/test-current")
+def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
+    """
+    Test the currently configured AI provider for a user.
+
+    This endpoint reads the user's saved configuration from the database,
+    decrypts the API key, and tests the connection.
+
+    Args:
+        user_id: User ID to test configuration for
+        db: Database session
+
+    Returns:
+        Success status with detailed error messages if failed
+    """
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID is required")
+
+    print(f"[TEST CURRENT] Testing AI config for user_id={user_id}")
+
+    # Get user's active configuration
+    config = db.query(Configuration).filter(
+        Configuration.user_id == user_id,
+        Configuration.is_active == True
+    ).first()
+
+    if not config:
+        print(f"[TEST CURRENT] ✗ No active configuration found for user {user_id}")
+        return {
+            "success": False,
+            "message": "No AI provider configured. Please save your settings first."
+        }
+
+    # Decrypt API key
+    try:
+        api_key = decrypt(config.ai_api_key_encrypted)
+        if not api_key or len(api_key) < 10:
+            raise ValueError("Invalid or empty API key")
+        print(f"[TEST CURRENT] ✓ Successfully decrypted API key (length: {len(api_key)})")
+    except Exception as e:
+        print(f"[TEST CURRENT] ✗ Failed to decrypt API key: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to decrypt API key: {str(e)}. Please re-save your configuration."
+        }
+
+    # Get provider (with fallback for older DBs)
+    ai_provider = getattr(config, 'ai_provider', 'openai')
+    base_url = config.ai_base_url
+
+    print(f"[TEST CURRENT] Testing provider={ai_provider}, base_url={base_url}")
+
+    # Test connection using the same logic as /ai-provider/test
+    try:
+        if ai_provider == "anthropic":
+            # Test Anthropic API
+            headers = {
+                "x-api-key": api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+            payload = {
+                "model": "claude-3-haiku-20240307",
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 10
+            }
+            url = f"{base_url.rstrip('/')}/v1/messages"
+            print(f"[TEST CURRENT] Anthropic test URL: {url}")
+
+        else:
+            # Test OpenAI or Custom (OpenAI-compatible)
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 10,
+            }
+            url = f"{base_url.rstrip('/')}/chat/completions"
+            print(f"[TEST CURRENT] OpenAI/Custom test URL: {url}")
+
+        # Attempt to call the AI provider
+        print(f"[TEST CURRENT] Sending request...")
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        print(f"[TEST CURRENT] Response status: {response.status_code}")
+
+        # Consider 200-299 as success
+        success = 200 <= response.status_code < 300
+
+        if not success:
+            # Include error details for debugging
+            try:
+                error_detail = response.json()
+                error_msg = error_detail.get('error', {}).get('message', response.text[:200])
+            except:
+                error_msg = response.text[:200]
+
+            print(f"[TEST CURRENT] ✗ Test failed: {error_msg}")
+            return {
+                "success": False,
+                "status_code": response.status_code,
+                "message": f"Connection failed: {error_msg}",
+                "provider": ai_provider,
+                "base_url": base_url
+            }
+
+        print(f"[TEST CURRENT] ✓ Test successful!")
+        return {
+            "success": True,
+            "status_code": response.status_code,
+            "message": "✓ Connection successful! Your AI provider is working correctly.",
+            "provider": ai_provider,
+            "base_url": base_url
+        }
+
+    except requests.Timeout:
+        print(f"[TEST CURRENT] ✗ Request timeout")
+        return {
+            "success": False,
+            "message": f"Request timeout - {base_url} is not responding",
+            "provider": ai_provider,
+            "base_url": base_url
+        }
+    except requests.ConnectionError:
+        print(f"[TEST CURRENT] ✗ Connection error")
+        return {
+            "success": False,
+            "message": f"Connection error - cannot reach {base_url}",
+            "provider": ai_provider,
+            "base_url": base_url
+        }
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[TEST CURRENT] ✗ Unexpected error: {e}")
+        print(f"[TEST CURRENT] Traceback:\n{tb}")
+        return {
+            "success": False,
+            "message": f"Test failed: {str(e)}",
+            "provider": ai_provider,
+            "base_url": base_url
+        }

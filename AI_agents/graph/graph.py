@@ -110,7 +110,16 @@ def fan_out_to_parallel_agents(state: OrchestraState):
     """
     After design completes, send state to backend, frontend, and backlog
     agents in parallel using LangGraph Send API.
+
+    If design failed, route to error_handler instead.
     """
+    # Check if design agent failed
+    if state.get("errors", {}).get("design"):
+        logger.error("[fan_out] Design agent failed - routing to error_handler")
+        return [Send("error_handler", state)]
+
+    # Design succeeded - proceed with parallel agents
+    logger.info("[fan_out] Design succeeded - routing to parallel agents")
     return [
         Send("backend_agent", state),
         Send("frontend_agent", state),
@@ -172,11 +181,12 @@ def create_graph() -> StateGraph:
     graph.add_edge(START, "knowledge_retrieval")
     graph.add_edge("knowledge_retrieval", "design")
 
-    # Parallel fan-out: design → [backend, frontend, backlog]
+    # Parallel fan-out: design → [backend, frontend, backlog] OR error_handler
+    # The fan_out function checks if design failed and routes accordingly
     graph.add_conditional_edges(
         "design",
         fan_out_to_parallel_agents,
-        ["backend_agent", "frontend_agent", "backlog_agent"]
+        ["backend_agent", "frontend_agent", "backlog_agent", "error_handler"]
     )
 
     # Fan-in: all 3 agents → integration_check

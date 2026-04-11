@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { saveAIProvider, testAIProvider, getAIProviderConfig } from '../lib/api/auth';
+import { saveAIProvider, testAIProvider, getAIProviderConfig, testCurrentAIProvider } from '../lib/api/auth';
 import { useAuth } from '../hooks/useAuth';
 
 export default function AIProviderSetup() {
@@ -42,11 +42,23 @@ export default function AIProviderSetup() {
         const detectedProvider = config.ai_provider || detectProviderFromUrl(config.base_url);
         setProvider(detectedProvider as 'openai' | 'anthropic' | 'custom');
 
-        // Test existing configuration
+        // Test existing configuration automatically
         setIsTestingConnection(true);
-        // Note: Can't test without API key, will show status message instead
-        setMessage('✓ Configuration found! Update the fields below to modify it.');
-        setIsTestingConnection(false);
+        setMessage('Testing saved configuration...');
+
+        try {
+          const testResult = await testCurrentAIProvider(user.id);
+          if (testResult.success) {
+            setMessage(`✓ Saved configuration is working! Provider: ${testResult.provider}, URL: ${testResult.base_url}`);
+          } else {
+            setMessage(`⚠ Saved configuration has issues: ${testResult.message}. Please update your settings.`);
+          }
+        } catch (error) {
+          console.error('Failed to test current config:', error);
+          setMessage('⚠ Could not test saved configuration. You may need to update your API key.');
+        } finally {
+          setIsTestingConnection(false);
+        }
       }
     } catch (error) {
       console.error('Failed to load existing config:', error);

@@ -41,3 +41,12 @@ export async function testAIProvider(baseUrl: string, apiKey: string, provider: 
   });
   return res.json();
 }
+
+export async function testCurrentAIProvider(userId: number) {
+  const res = await fetch(`${API}/config/ai-provider/test-current?user_id=${userId}`);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(error.detail || `HTTP ${res.status}: Failed to test configuration`);
+  }
+  return res.json();
+}
