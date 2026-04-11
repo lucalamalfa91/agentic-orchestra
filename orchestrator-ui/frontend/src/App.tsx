@@ -16,7 +16,7 @@ import './App.css';
 
 function AppContent() {
   const { user, token } = useAuth();
-  const { isGenerating, isCompleted } = useGeneration();
+  const { isGenerating, currentStep, percentage, message } = useGeneration();
   const location = useLocation();
 
   if (!token) return <Navigate to="/auth" />;
@@ -64,8 +64,8 @@ function AppContent() {
               to="/"
               className="px-4 py-2 rounded-lg text-sm font-semibold transition-all focus-ring"
               style={{
-                background: !isKnowledgePage ? 'var(--gradient-primary)' : 'var(--color-glass)',
-                border: `1px solid ${!isKnowledgePage ? 'rgba(102, 126, 234, 0.5)' : 'var(--color-glass-border)'}`,
+                background: location.pathname === '/' ? 'var(--gradient-primary)' : 'var(--color-glass)',
+                border: `1px solid ${location.pathname === '/' ? 'rgba(102, 126, 234, 0.5)' : 'var(--color-glass-border)'}`,
                 color: 'var(--color-text)',
               }}
             >
@@ -75,12 +75,23 @@ function AppContent() {
               to="/knowledge"
               className="px-4 py-2 rounded-lg text-sm font-semibold transition-all focus-ring"
               style={{
-                background: isKnowledgePage ? 'var(--gradient-primary)' : 'var(--color-glass)',
-                border: `1px solid ${isKnowledgePage ? 'rgba(102, 126, 234, 0.5)' : 'var(--color-glass-border)'}`,
+                background: location.pathname === '/knowledge' ? 'var(--gradient-primary)' : 'var(--color-glass)',
+                border: `1px solid ${location.pathname === '/knowledge' ? 'rgba(102, 126, 234, 0.5)' : 'var(--color-glass-border)'}`,
                 color: 'var(--color-text)',
               }}
             >
               Knowledge Sources
+            </Link>
+            <Link
+              to="/settings"
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all focus-ring"
+              style={{
+                background: location.pathname === '/settings' ? 'var(--gradient-primary)' : 'var(--color-glass)',
+                border: `1px solid ${location.pathname === '/settings' ? 'rgba(102, 126, 234, 0.5)' : 'var(--color-glass-border)'}`,
+                color: 'var(--color-text)',
+              }}
+            >
+              ⚙️ Settings
             </Link>
           </nav>
         </div>
@@ -95,18 +106,23 @@ function AppContent() {
               <>
                 <div className="animate-scale-in">
                   {isGenerating ? (
-                    <ProgressIndicator />
+                    <ProgressIndicator
+                      currentStep={currentStep}
+                      percentage={percentage}
+                      message={message}
+                    />
                   ) : (
                     <MVPCreationScreen />
                   )}
                 </div>
                 <div className="animate-slide-up">
-                  <ProjectHistory />
+                  <ProjectHistory onEdit={(id) => console.log('Edit project:', id)} />
                 </div>
               </>
             }
           />
           <Route path="/knowledge" element={<KnowledgeSourcesScreen />} />
+          <Route path="/settings" element={<AIProviderSetup />} />
         </Routes>
       </main>
 

@@ -46,6 +46,7 @@ class ProjectRequirementResponse(BaseModel):
 class ProjectResponse(BaseModel):
     """Project data for API responses."""
     id: int
+    user_id: Optional[int] = None
     name: str
     description: Optional[str] = None
     github_repo_url: Optional[str] = None

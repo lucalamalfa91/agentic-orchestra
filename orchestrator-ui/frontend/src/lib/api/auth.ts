@@ -18,11 +18,11 @@ export async function getAIProviderConfig(userId: number) {
   return res.json();
 }
 
-export async function saveAIProvider(userId: number, baseUrl: string, apiKey: string) {
+export async function saveAIProvider(userId: number, baseUrl: string, apiKey: string, provider: 'openai' | 'anthropic' = 'openai') {
   const res = await fetch(`${API}/config/ai-provider`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, base_url: baseUrl, api_key: apiKey })
+    body: JSON.stringify({ user_id: userId, base_url: baseUrl, api_key: apiKey, ai_provider: provider })
   });
   return res.json();
 }

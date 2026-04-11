@@ -28,6 +28,7 @@ class AIProviderConfig(BaseModel):
     user_id: int
     base_url: str
     api_key: str
+    ai_provider: str = "openai"  # "openai" or "anthropic"
 
 
 class AIProviderTest(BaseModel):
@@ -65,12 +66,14 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
                 user_id=config_data.user_id,
                 ai_base_url=config_data.base_url,
                 ai_api_key_encrypted=encrypt(config_data.api_key),
+                ai_provider=config_data.ai_provider,
                 is_active=True,
             )
         else:
             # Update existing configuration
             config.ai_base_url = config_data.base_url
             config.ai_api_key_encrypted = encrypt(config_data.api_key)
+            config.ai_provider = config_data.ai_provider
             config.is_active = True
 
         db.add(config)
@@ -102,9 +105,13 @@ def get_ai_provider(user_id: int, db: Session = Depends(get_db)):
     config = db.query(Configuration).filter(Configuration.user_id == user_id).first()
 
     if not config:
-        return {"base_url": None, "configured": False}
+        return {"base_url": None, "ai_provider": "openai", "configured": False}
 
-    return {"base_url": config.ai_base_url, "configured": True}
+    return {
+        "base_url": config.ai_base_url,
+        "ai_provider": getattr(config, 'ai_provider', 'openai'),  # Graceful fallback for older DBs
+        "configured": True
+    }
 
 
 @router.post("/ai-provider/test")

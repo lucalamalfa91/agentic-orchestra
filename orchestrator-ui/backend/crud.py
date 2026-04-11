@@ -19,14 +19,16 @@ def create_project(
     name: str,
     description: Optional[str] = None,
     github_repo_url: Optional[str] = None,
-    status: str = "pending"
+    status: str = "pending",
+    user_id: Optional[int] = None
 ) -> models.Project:
     """Create a new project."""
     project = models.Project(
         name=name,
         description=description,
         github_repo_url=github_repo_url,
-        status=status
+        status=status,
+        user_id=user_id
     )
     db.add(project)
     db.commit()

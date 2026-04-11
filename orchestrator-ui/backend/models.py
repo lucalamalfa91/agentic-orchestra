@@ -27,6 +27,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(255), nullable=False)
     description = Column(Text)
     github_repo_url = Column(String(500))
@@ -35,6 +36,7 @@ class Project(Base):
     generation_attempt = Column(Integer, default=1, nullable=False)
 
     # Relationships
+    user = relationship("User", backref="projects")
     requirements = relationship("ProjectRequirement", back_populates="project", cascade="all, delete-orphan")
     logs = relationship("GenerationLog", back_populates="project", cascade="all, delete-orphan")
 
@@ -118,6 +120,7 @@ class Configuration(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     ai_base_url = Column(String(500), nullable=False)
     ai_api_key_encrypted = Column(Text, nullable=False)
+    ai_provider = Column(String(50), nullable=False, server_default="openai")  # "openai" or "anthropic"
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

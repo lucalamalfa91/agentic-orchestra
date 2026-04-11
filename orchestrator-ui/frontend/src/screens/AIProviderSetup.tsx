@@ -8,11 +8,22 @@ import { useAuth } from '../hooks/useAuth';
 export default function AIProviderSetup() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
+  const [provider, setProvider] = useState<'openai' | 'anthropic'>('anthropic');
+  const [baseUrl, setBaseUrl] = useState('https://api.anthropic.com');
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
+  // Update base URL when provider changes
+  const handleProviderChange = (newProvider: 'openai' | 'anthropic') => {
+    setProvider(newProvider);
+    if (newProvider === 'anthropic') {
+      setBaseUrl('https://api.anthropic.com');
+    } else {
+      setBaseUrl('https://api.openai.com/v1');
+    }
+  };
 
   const handleTest = async () => {
     setLoading(true);
@@ -35,8 +46,9 @@ export default function AIProviderSetup() {
     setLoading(true);
     setMessage('');
     try {
-      await saveAIProvider(user.id, baseUrl, apiKey);
-      navigate('/');
+      await saveAIProvider(user.id, baseUrl, apiKey, provider);
+      setMessage('✓ Configuration saved successfully!');
+      setTimeout(() => navigate('/'), 1000);
     } catch {
       setMessage('✗ Error saving configuration');
     }
@@ -91,6 +103,56 @@ export default function AIProviderSetup() {
         </div>
 
         <div className="space-y-6">
+          {/* AI Provider Selection */}
+          <div>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              AI Provider
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleProviderChange('anthropic')}
+                className="p-4 rounded-lg transition-all focus-ring"
+                style={{
+                  background: provider === 'anthropic' ? 'var(--gradient-primary)' : 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${provider === 'anthropic' ? 'rgba(102, 126, 234, 0.5)' : 'rgba(255, 255, 255, 0.2)'}`,
+                  color: 'var(--color-text)',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <div className="text-center">
+                  <div className="text-lg mb-1">🤖</div>
+                  <div>Anthropic</div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                    Claude API
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleProviderChange('openai')}
+                className="p-4 rounded-lg transition-all focus-ring"
+                style={{
+                  background: provider === 'openai' ? 'var(--gradient-primary)' : 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${provider === 'openai' ? 'rgba(102, 126, 234, 0.5)' : 'rgba(255, 255, 255, 0.2)'}`,
+                  color: 'var(--color-text)',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <div className="text-center">
+                  <div className="text-lg mb-1">✨</div>
+                  <div>OpenAI</div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                    GPT API
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Base URL Input */}
           <div>
             <label

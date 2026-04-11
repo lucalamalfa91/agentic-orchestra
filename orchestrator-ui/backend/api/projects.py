@@ -2,21 +2,24 @@
 Projects API endpoints.
 """
 from typing import List, Literal
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+import asyncio
 
 try:
     from orchestrator_ui.backend import crud, schemas
-    from orchestrator_ui.backend.database import get_db
+    from orchestrator_ui.backend.database import get_db, SessionLocal
+    from orchestrator_ui.backend.orchestrator import GenerationOrchestrator, generate_id
 except ModuleNotFoundError:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     import crud
     import schemas
-    from database import get_db
+    from database import get_db, SessionLocal
+    from orchestrator import GenerationOrchestrator, generate_id
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -146,9 +149,16 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to delete project: {str(e)}")
 
 
+@router.options("/{project_id}/resume")
+async def options_resume(project_id: int):
+    """CORS preflight for resume endpoint."""
+    return JSONResponse(status_code=200, content={}, headers=CORS_HEADERS)
+
+
 @router.post("/{project_id}/resume", response_model=schemas.GenerationStartResponse)
 async def resume_generation(
     project_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -178,14 +188,13 @@ async def resume_generation(
 
     # 3. Reconstruct GenerationRequest
     import json
-    from orchestrator_ui.backend.schemas import GenerationRequest, TechStack
 
     try:
-        request = GenerationRequest(
+        request = schemas.GenerationRequest(
             mvp_description=requirements.mvp_description,
             features=json.loads(requirements.features),
             user_stories=json.loads(requirements.user_stories) if requirements.user_stories else None,
-            tech_stack=TechStack(
+            tech_stack=schemas.TechStack(
                 frontend=requirements.frontend_framework or "react",
                 backend=requirements.backend_framework or "python",
                 database=requirements.database_type or "postgresql",
@@ -209,22 +218,34 @@ async def resume_generation(
         generation_attempt=project.generation_attempt + 1
     )
 
-    # 7. Start generation in background
-    from orchestrator_ui.backend.orchestrator import GenerationOrchestrator, generate_id
-    import asyncio
+    # 7. Get user_id from project (needed for env var injection)
+    project_user_id = project.user_id if hasattr(project, 'user_id') else None
+    print(f"[DEBUG Resume] project_id={project_id}, project.user_id={project_user_id}")
 
+    # Start generation in background with its own DB session
     generation_id = generate_id()
-    orchestrator = GenerationOrchestrator()
 
-    asyncio.create_task(
-        orchestrator.run_generation(
-            generation_id=generation_id,
-            request=request,
-            db=db,
-            user_id=None,  # TODO: Get from auth context if available
-            existing_project_id=project_id  # Pass existing project ID for resume mode
-        )
-    )
+    async def run_resume_background():
+        """Background task with its own DB session to avoid session conflicts."""
+        task_db = SessionLocal()
+        try:
+            await asyncio.sleep(1.5)  # Wait for WebSocket to connect
+            orchestrator = GenerationOrchestrator()
+            await orchestrator.run_generation(
+                generation_id=generation_id,
+                request=request,
+                db=task_db,
+                user_id=project_user_id,  # FIX: Pass user_id for env var injection
+                existing_project_id=project_id
+            )
+        except Exception as e:
+            print(f"[ERROR] Resume generation failed: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            task_db.close()
+
+    background_tasks.add_task(run_resume_background)
 
     return schemas.GenerationStartResponse(
         generation_id=generation_id,

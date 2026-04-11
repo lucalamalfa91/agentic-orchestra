@@ -66,7 +66,7 @@ class GenerationOrchestrator:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _inject_env_vars(self, db: Session, user_id: int) -> None:
+    def _inject_env_vars(self, db: Session, user_id: int) -> str:
         """
         Inject user configuration and tokens as environment variables.
 
@@ -76,38 +76,118 @@ class GenerationOrchestrator:
         Args:
             db: Database session
             user_id: User ID to fetch config for
+
+        Returns:
+            AI provider name configured by user ("openai" or "anthropic")
+
+        Raises:
+            ValueError: If user_id is None or configuration is missing/invalid
         """
+        # Validate user_id
+        if not user_id:
+            raise ValueError(
+                "❌ Cannot start generation: No user ID provided. "
+                "Please ensure you're logged in with GitHub."
+            )
+
+        ai_provider = "openai"  # Default fallback
+
         try:
             # Inject AI provider configuration
             config = db.query(Configuration).filter(
                 Configuration.user_id == user_id,
                 Configuration.is_active == True
             ).first()
-            if config:
+
+            if not config:
+                raise ValueError(
+                    f"❌ No AI configuration found for user_id={user_id}. "
+                    "Please configure your AI provider in Settings before starting generation."
+                )
+
+            # Decrypt and validate API key
+            try:
                 api_key = decrypt(config.ai_api_key_encrypted)
-                os.environ["ADESSO_BASE_URL"] = config.ai_base_url
-                os.environ["ADESSO_AI_HUB_KEY"] = api_key
-                print(f"[OK] Injected AI config: ADESSO_BASE_URL={config.ai_base_url}")
-            else:
-                print("[WARN] No active AI config in DB for user, using .env fallback")
+                if not api_key or len(api_key) < 10:
+                    raise ValueError("Invalid or empty API key")
+            except Exception as e:
+                raise ValueError(
+                    f"❌ Failed to decrypt API key: {e}. "
+                    "Please re-configure your API key in Settings."
+                )
+
+            # Read provider from user configuration (graceful fallback for existing DBs)
+            ai_provider = getattr(config, 'ai_provider', 'openai')
+
+            # Validate base_url
+            if not config.ai_base_url:
+                raise ValueError(
+                    f"❌ Missing base URL for AI provider '{ai_provider}'. "
+                    "Please configure your base URL in Settings."
+                )
+
+            # Inject API key with correct env var name based on provider
+            if ai_provider == "anthropic":
+                os.environ["ANTHROPIC_API_KEY"] = api_key
+                print(f"[DEBUG] Set ANTHROPIC_API_KEY = {api_key[:10]}...{api_key[-4:]}")
+
+                # Validate Anthropic API key format
+                if "anthropic.com" in config.ai_base_url.lower() and not api_key.startswith("sk-ant-"):
+                    print(f"[WARN] Using official Anthropic API but key doesn't start with 'sk-ant-'. "
+                          f"This may cause authentication errors. "
+                          f"Expected: sk-ant-api-xxx, Got: {api_key[:10]}...")
+
+                # Set base_url if it's not default Anthropic
+                if "anthropic.com" not in config.ai_base_url.lower():
+                    os.environ["ANTHROPIC_BASE_URL"] = config.ai_base_url
+                    print(f"[DEBUG] Set ANTHROPIC_BASE_URL = {config.ai_base_url}")
+                else:
+                    print(f"[DEBUG] Using official Anthropic API (api.anthropic.com)")
+
+            elif ai_provider == "openai":
+                # OpenAI or OpenAI-compatible (like Adesso AI Hub)
+                os.environ["OPENAI_API_KEY"] = api_key
+                print(f"[DEBUG] Set OPENAI_API_KEY = {api_key[:10]}...{api_key[-4:]}")
+                # Set base_url for OpenAI-compatible providers
+                if "openai.com" not in config.ai_base_url.lower():
+                    os.environ["OPENAI_BASE_URL"] = config.ai_base_url
+                    print(f"[DEBUG] Set OPENAI_BASE_URL = {config.ai_base_url}")
+
+            # Legacy support: also set ADESSO_* env vars for backwards compatibility
+            os.environ["ADESSO_BASE_URL"] = config.ai_base_url
+            os.environ["ADESSO_AI_HUB_KEY"] = api_key
+
+            print(f"[OK] Injected AI config: provider={ai_provider}, base_url={config.ai_base_url}, user_id={user_id}")
 
             # Inject GitHub token for MCP GitHub server
             user = db.query(User).filter(User.id == user_id).first()
             if user and user.github_token:
                 os.environ["GITHUB_TOKEN"] = user.github_token
                 print(f"[OK] Injected GITHUB_TOKEN for user {user.github_username}")
+            else:
+                print(f"[WARN] No GitHub token found for user_id={user_id}")
 
             # TODO: Inject other MCP server tokens (Azure DevOps, Railway, etc.)
             # from models.DeployProviderAuth table
 
+        except ValueError:
+            # Re-raise ValueError with user-friendly message
+            raise
         except Exception as e:
-            print(f"[WARN] Could not inject env vars: {e}")
+            # Wrap other exceptions in ValueError with context
+            raise ValueError(
+                f"❌ Failed to inject environment variables: {type(e).__name__}: {e}. "
+                "Please check your Settings configuration."
+            )
+
+        return ai_provider
 
     def _build_initial_state(
         self,
         request: schemas.GenerationRequest,
         project_id: str,
-        user_id: int
+        user_id: int,
+        ai_provider: str
     ) -> OrchestraState:
         """
         Build initial OrchestraState from user request.
@@ -116,6 +196,7 @@ class GenerationOrchestrator:
             request: Generation request from API
             project_id: Unique project identifier
             user_id: User ID
+            ai_provider: AI provider name configured by user
 
         Returns:
             Initial state dict for LangGraph execution
@@ -127,7 +208,7 @@ class GenerationOrchestrator:
             "requirements": requirements_text,
             "project_id": project_id,
             "user_id": str(user_id),
-            "ai_provider": "anthropic",  # Changed to anthropic for testing
+            "ai_provider": ai_provider,
 
             # Agent-produced data (will be populated during execution)
             "parsed_requirements": None,
@@ -344,6 +425,7 @@ class GenerationOrchestrator:
                     name=f"Generated App - {generation_id[:8]}",
                     description=request.mvp_description,
                     status="in_progress",
+                    user_id=user_id
                 )
 
                 # Save requirements
@@ -368,12 +450,24 @@ class GenerationOrchestrator:
             )
             await self.broadcast_progress(generation_id, "start", 0, 0, "Starting app generation...")
 
-            # Inject environment variables (tokens, config)
-            if user_id:
-                self._inject_env_vars(db, user_id)
+            # Inject environment variables (tokens, config) and get user's AI provider
+            ai_provider = "openai"  # Default
+            try:
+                if user_id:
+                    ai_provider = self._inject_env_vars(db, user_id)
+                else:
+                    raise ValueError(
+                        "❌ No user_id provided. Please log in with GitHub before starting generation."
+                    )
+            except ValueError as ve:
+                # User-friendly configuration errors
+                error_msg = str(ve)
+                print(f"[ERROR] Configuration error: {error_msg}")
+                await self.broadcast_progress(generation_id, "error", 0, 0, error_msg)
+                raise
 
             # Build initial state
-            initial_state = self._build_initial_state(request, str(project.id), user_id or 1)
+            initial_state = self._build_initial_state(request, str(project.id), user_id or 1, ai_provider)
 
             # Load knowledge sources
             # knowledge_sources = self._load_knowledge_sources(db, user_id or 1)
