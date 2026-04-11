@@ -134,19 +134,25 @@ def github_login_with_gh(db: Session = Depends(get_db)):
         ai_api_key = os.getenv("ADESSO_AI_HUB_KEY", "").strip()
 
         if ai_base_url and ai_api_key:
-            # Check if config exists
-            config = db.query(Configuration).filter(Configuration.user_id == user.id).first()
-            if not config:
-                config = Configuration(
-                    user_id=user.id,
-                    ai_base_url=ai_base_url,
-                    ai_api_key_encrypted=encrypt(ai_api_key),
-                    is_active=True,
+            # Use raw SQL to bypass SQLAlchemy metadata cache issue
+            from sqlalchemy import text
+            config_result = db.execute(
+                text("SELECT id FROM configurations WHERE user_id = :user_id LIMIT 1"),
+                {"user_id": user.id}
+            ).fetchone()
+
+            if not config_result:
+                # Create new config using raw SQL
+                db.execute(
+                    text("INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active) VALUES (:user_id, :base_url, :api_key, 'custom', 1)"),
+                    {"user_id": user.id, "base_url": ai_base_url, "api_key": encrypt(ai_api_key)}
                 )
-                db.add(config)
             else:
-                # Update existing config to be active
-                config.is_active = True
+                # Update existing config
+                db.execute(
+                    text("UPDATE configurations SET is_active = 1 WHERE user_id = :user_id"),
+                    {"user_id": user.id}
+                )
             db.commit()
 
         # Generate JWT token

@@ -152,14 +152,21 @@ def get_ai_provider(user_id: int, db: Session = Depends(get_db)):
     if not user_id:
         raise HTTPException(status_code=400, detail="User ID is required")
 
-    config = db.query(Configuration).filter(Configuration.user_id == user_id).first()
+    # Use raw SQL to bypass SQLAlchemy metadata cache issue
+    from sqlalchemy import text
+    result = db.execute(
+        text("SELECT ai_base_url, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = 1 LIMIT 1"),
+        {"user_id": user_id}
+    ).fetchone()
 
-    if not config:
+    if not result:
         return {"base_url": None, "ai_provider": "openai", "configured": False}
 
+    base_url, ai_provider = result
+
     return {
-        "base_url": config.ai_base_url,
-        "ai_provider": getattr(config, 'ai_provider', 'openai'),  # Graceful fallback for older DBs
+        "base_url": base_url,
+        "ai_provider": ai_provider or "openai",  # Graceful fallback if NULL
         "configured": True
     }
 

@@ -69,7 +69,10 @@
       "Bash(alembic revision:*)",
       "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)",
       "Bash(echo:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(xargs:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(alembic current:*)"
     ]
   }
 }

@@ -85,20 +85,25 @@ async def start_generation(
     if not user.github_token:
         raise HTTPException(status_code=400, detail="GitHub account not connected")
 
-    config = db.query(Configuration).filter(
-        Configuration.user_id == user_id,
-        Configuration.is_active == True
-    ).first()
+    # Use raw SQL to bypass SQLAlchemy metadata cache issue
+    from sqlalchemy import text
+    config_result = db.execute(
+        text("SELECT id, is_active, ai_base_url FROM configurations WHERE user_id = :user_id AND is_active = 1 LIMIT 1"),
+        {"user_id": user_id}
+    ).fetchone()
 
-    print(f"DEBUG: user_id={user_id}, config={config}")
-    if config:
-        print(f"DEBUG: config.is_active={config.is_active}, config.ai_base_url={config.ai_base_url}")
+    print(f"DEBUG: user_id={user_id}, config_result={config_result}")
+    if config_result:
+        print(f"DEBUG: config.is_active={config_result[1]}, config.ai_base_url={config_result[2]}")
 
-    if not config:
-        all_configs = db.query(Configuration).filter(Configuration.user_id == user_id).all()
+    if not config_result:
+        all_configs = db.execute(
+            text("SELECT id, is_active, ai_base_url FROM configurations WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        ).fetchall()
         print(f"DEBUG: All configs for user {user_id}: {len(all_configs)}")
         for cfg in all_configs:
-            print(f"  - id={cfg.id}, is_active={cfg.is_active}, base_url={cfg.ai_base_url}")
+            print(f"  - id={cfg[0]}, is_active={cfg[1]}, base_url={cfg[2]}")
         raise HTTPException(status_code=400, detail="AI provider not configured")
 
     generation_id = generate_id()

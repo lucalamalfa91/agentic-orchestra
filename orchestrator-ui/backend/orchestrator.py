@@ -94,20 +94,25 @@ class GenerationOrchestrator:
 
         try:
             # Inject AI provider configuration
-            config = db.query(Configuration).filter(
-                Configuration.user_id == user_id,
-                Configuration.is_active == True
-            ).first()
+            # Use raw SQL to bypass SQLAlchemy metadata cache issue
+            from sqlalchemy import text
+            config_result = db.execute(
+                text("SELECT ai_base_url, ai_api_key_encrypted, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = 1 LIMIT 1"),
+                {"user_id": user_id}
+            ).fetchone()
 
-            if not config:
+            if not config_result:
                 raise ValueError(
                     f"❌ No AI configuration found for user_id={user_id}. "
                     "Please configure your AI provider in Settings before starting generation."
                 )
 
+            base_url, api_key_encrypted, ai_provider = config_result
+            ai_provider = ai_provider or "openai"  # Graceful fallback
+
             # Decrypt and validate API key
             try:
-                api_key = decrypt(config.ai_api_key_encrypted)
+                api_key = decrypt(api_key_encrypted)
                 if not api_key or len(api_key) < 10:
                     raise ValueError("Invalid or empty API key")
             except Exception as e:
@@ -116,11 +121,8 @@ class GenerationOrchestrator:
                     "Please re-configure your API key in Settings."
                 )
 
-            # Read provider from user configuration (graceful fallback for existing DBs)
-            ai_provider = getattr(config, 'ai_provider', 'openai')
-
             # Validate base_url
-            if not config.ai_base_url:
+            if not base_url:
                 raise ValueError(
                     f"❌ Missing base URL for AI provider '{ai_provider}'. "
                     "Please configure your base URL in Settings."
@@ -132,15 +134,15 @@ class GenerationOrchestrator:
                 print(f"[DEBUG] Set ANTHROPIC_API_KEY = {api_key[:10]}...{api_key[-4:]}")
 
                 # Validate Anthropic API key format
-                if "anthropic.com" in config.ai_base_url.lower() and not api_key.startswith("sk-ant-"):
+                if "anthropic.com" in base_url.lower() and not api_key.startswith("sk-ant-"):
                     print(f"[WARN] Using official Anthropic API but key doesn't start with 'sk-ant-'. "
                           f"This may cause authentication errors. "
                           f"Expected: sk-ant-api-xxx, Got: {api_key[:10]}...")
 
                 # Set base_url if it's not default Anthropic
-                if "anthropic.com" not in config.ai_base_url.lower():
-                    os.environ["ANTHROPIC_BASE_URL"] = config.ai_base_url
-                    print(f"[DEBUG] Set ANTHROPIC_BASE_URL = {config.ai_base_url}")
+                if "anthropic.com" not in base_url.lower():
+                    os.environ["ANTHROPIC_BASE_URL"] = base_url
+                    print(f"[DEBUG] Set ANTHROPIC_BASE_URL = {base_url}")
                 else:
                     print(f"[DEBUG] Using official Anthropic API (api.anthropic.com)")
 
@@ -151,17 +153,17 @@ class GenerationOrchestrator:
 
                 # For custom providers, always set base URL
                 # For OpenAI, only set if not official API
-                if ai_provider == "custom" or "openai.com" not in config.ai_base_url.lower():
-                    os.environ["OPENAI_BASE_URL"] = config.ai_base_url
-                    print(f"[DEBUG] Set OPENAI_BASE_URL = {config.ai_base_url}")
+                if ai_provider == "custom" or "openai.com" not in base_url.lower():
+                    os.environ["OPENAI_BASE_URL"] = base_url
+                    print(f"[DEBUG] Set OPENAI_BASE_URL = {base_url}")
                     if ai_provider == "custom":
-                        print(f"[INFO] Using custom AI hub/proxy: {config.ai_base_url}")
+                        print(f"[INFO] Using custom AI hub/proxy: {base_url}")
 
             # Legacy support: also set ADESSO_* env vars for backwards compatibility
-            os.environ["ADESSO_BASE_URL"] = config.ai_base_url
+            os.environ["ADESSO_BASE_URL"] = base_url
             os.environ["ADESSO_AI_HUB_KEY"] = api_key
 
-            print(f"[OK] Injected AI config: provider={ai_provider}, base_url={config.ai_base_url}, user_id={user_id}")
+            print(f"[OK] Injected AI config: provider={ai_provider}, base_url={base_url}, user_id={user_id}")
 
             # Inject GitHub token for MCP GitHub server
             user = db.query(User).filter(User.id == user_id).first()

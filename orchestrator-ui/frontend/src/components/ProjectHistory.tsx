@@ -1,12 +1,14 @@
 /**
  * Project history component showing all generated apps.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { projectsApi, generationControlApi } from '../api/client';
 import type { Project } from '../types';
 import ProjectCard from './ProjectCard';
 import GenerationProgressViewer from './GenerationProgressViewer';
 import { useGenerationContext } from '../context/GenerationContext';
+
+const WS_BASE = 'ws://localhost:8000';
 
 interface ProjectHistoryProps {
   onEdit: (projectId: number) => void;
@@ -23,11 +25,98 @@ const ProjectHistory: React.FC<ProjectHistoryProps> = ({ onEdit, refreshTrigger 
   const [progressGenerationId, setProgressGenerationId] = useState<string | null>(null);
   const { activeGenerationId } = useGenerationContext();
 
+  // WebSocket state for progress viewer
+  const [wsConnected, setWsConnected] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [percentage, setPercentage] = useState(0);
+  const [message, setMessage] = useState('');
+  const [wsError, setWsError] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
   useEffect(() => {
     if (activeGenerationId) {
       setProgressGenerationId(activeGenerationId);
     }
   }, [activeGenerationId]);
+
+  // Connect to WebSocket when progressGenerationId is set
+  useEffect(() => {
+    if (!progressGenerationId) {
+      // Cleanup when modal is closed
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setWsConnected(false);
+      setCurrentStep(0);
+      setPercentage(0);
+      setMessage('');
+      setWsError(null);
+      return;
+    }
+
+    // Connect to WebSocket
+    const wsUrl = `${WS_BASE}/ws/generation/${progressGenerationId}`;
+    console.log('[ProjectHistory WS] Connecting to:', wsUrl);
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('[ProjectHistory WS] Connected');
+      setWsConnected(true);
+      setWsError(null);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        console.log('[ProjectHistory WS] message:', msg);
+
+        setCurrentStep(msg.step_number ?? msg.step ?? 0);
+        setPercentage(msg.percentage ?? 0);
+        setMessage(msg.message ?? '');
+
+        // Handle error messages
+        if (msg.step === 'error') {
+          console.error('[ProjectHistory WS] backend error:', msg.message);
+          setWsError(msg.message || 'Generation failed');
+          ws.close();
+        }
+
+        // Handle completion
+        if (msg.step_number === 6 || msg.step === 'complete') {
+          console.log('[ProjectHistory WS] Generation complete');
+          setPercentage(100);
+          setTimeout(() => {
+            setProgressGenerationId(null);
+            fetchProjects(); // Refresh project list
+          }, 2000);
+        }
+      } catch (e) {
+        console.error('[ProjectHistory WS] parse error:', e, '| raw data:', event.data);
+      }
+    };
+
+    ws.onerror = (event: Event) => {
+      console.error('[ProjectHistory WS] onerror — readyState:', ws.readyState, '| url:', ws.url);
+      setWsError('WebSocket connection error');
+      setWsConnected(false);
+    };
+
+    ws.onclose = (event: CloseEvent) => {
+      console.log('[ProjectHistory WS] closed — code:', event.code, '| reason:', event.reason || '(none)');
+      setWsConnected(false);
+      wsRef.current = null;
+    };
+
+    // Cleanup on unmount or when progressGenerationId changes
+    return () => {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+  }, [progressGenerationId]);
 
   const fetchProjects = async () => {
     try {
@@ -209,6 +298,11 @@ const ProjectHistory: React.FC<ProjectHistoryProps> = ({ onEdit, refreshTrigger 
       {progressGenerationId && (
         <GenerationProgressViewer
           generationId={progressGenerationId}
+          percentage={percentage}
+          currentStep={currentStep}
+          message={message}
+          isConnected={wsConnected}
+          error={wsError}
           onClose={() => setProgressGenerationId(null)}
         />
       )}

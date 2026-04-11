@@ -45,10 +45,18 @@ def get_db():
 def init_db():
     """
     Initialize database by creating all tables.
+    Also refreshes metadata to avoid SQLAlchemy cache issues.
     """
     try:
         from orchestrator_ui.backend import models  # Import models to register them
     except ModuleNotFoundError:
         import models  # Fallback for direct script execution
+
+    # Create tables if they don't exist
     Base.metadata.create_all(bind=engine)
+
+    # CRITICAL: Reflect existing tables to refresh SQLAlchemy metadata cache
+    # This ensures SQLAlchemy sees columns added by migrations
+    Base.metadata.reflect(bind=engine, extend_existing=True)
+
     print("Database initialized successfully!")
