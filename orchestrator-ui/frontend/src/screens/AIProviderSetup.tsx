@@ -19,8 +19,13 @@ export default function AIProviderSetup() {
 
   // Load existing configuration on mount
   useEffect(() => {
+    console.log('[Settings] User object:', user);
+    console.log('[Settings] User ID:', user?.id);
+
     if (user?.id) {
       loadExistingConfig();
+    } else {
+      console.warn('[Settings] No user ID found - cannot load config');
     }
   }, [user?.id]);
 
@@ -85,16 +90,31 @@ export default function AIProviderSetup() {
       return;
     }
 
+    if (!baseUrl || !apiKey) {
+      setMessage('✗ Please fill in all required fields');
+      return;
+    }
+
     setLoading(true);
     setMessage('');
+
     try {
-      await saveAIProvider(user.id, baseUrl, apiKey, provider);
+      console.log('Saving AI provider config:', { provider, baseUrl: baseUrl.substring(0, 30), hasKey: !!apiKey });
+      const result = await saveAIProvider(user.id, baseUrl, apiKey, provider);
+      console.log('Save result:', result);
+
       setMessage('✓ Configuration saved successfully!');
-      setTimeout(() => navigate('/'), 1000);
-    } catch {
-      setMessage('✗ Error saving configuration');
+      setHasExistingConfig(true);
+
+      // Navigate after short delay to show success message
+      setTimeout(() => navigate('/'), 1500);
+    } catch (error) {
+      console.error('Save failed:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      setMessage(`✗ Failed to save: ${errorMsg}`);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

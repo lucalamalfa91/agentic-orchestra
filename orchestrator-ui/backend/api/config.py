@@ -38,6 +38,21 @@ class AIProviderTest(BaseModel):
     ai_provider: str = "openai"  # "openai", "anthropic", or "custom"
 
 
+@router.options("/ai-provider")
+async def options_ai_provider():
+    """CORS preflight for ai-provider endpoint."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=200,
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+
 @router.post("/ai-provider")
 def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db)):
     """
@@ -58,11 +73,14 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail="API key is required")
 
     try:
+        print(f"[SAVE CONFIG] user_id={config_data.user_id}, provider={config_data.ai_provider}, base_url={config_data.base_url}")
+
         # Find existing configuration
         config = db.query(Configuration).filter(Configuration.user_id == config_data.user_id).first()
 
         if not config:
             # Create new configuration
+            print(f"[SAVE CONFIG] Creating NEW configuration for user {config_data.user_id}")
             config = Configuration(
                 user_id=config_data.user_id,
                 ai_base_url=config_data.base_url,
@@ -72,6 +90,7 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
             )
         else:
             # Update existing configuration
+            print(f"[SAVE CONFIG] Updating EXISTING configuration (id={config.id}) for user {config_data.user_id}")
             config.ai_base_url = config_data.base_url
             config.ai_api_key_encrypted = encrypt(config_data.api_key)
             config.ai_provider = config_data.ai_provider
@@ -79,12 +98,20 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
 
         db.add(config)
         db.commit()
+        db.refresh(config)
 
-        return {"status": "saved", "user_id": config_data.user_id}
+        print(f"[SAVE CONFIG] ✓ Configuration saved successfully (id={config.id})")
+        return {"status": "saved", "user_id": config_data.user_id, "config_id": config.id}
 
     except ValueError as e:
+        print(f"[SAVE CONFIG] ✗ Encryption error: {e}")
+        db.rollback()
         raise HTTPException(status_code=400, detail=f"Encryption error: {str(e)}")
     except Exception as e:
+        print(f"[SAVE CONFIG] ✗ Failed to save: {e}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save configuration: {str(e)}")
 
 

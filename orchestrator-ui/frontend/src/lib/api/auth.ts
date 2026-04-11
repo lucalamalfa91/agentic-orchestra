@@ -24,6 +24,12 @@ export async function saveAIProvider(userId: number, baseUrl: string, apiKey: st
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id: userId, base_url: baseUrl, api_key: apiKey, ai_provider: provider })
   });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(error.detail || `HTTP ${res.status}: Failed to save configuration`);
+  }
+
   return res.json();
 }
 
