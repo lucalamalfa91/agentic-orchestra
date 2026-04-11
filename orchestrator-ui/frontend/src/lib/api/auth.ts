@@ -27,11 +27,11 @@ export async function saveAIProvider(userId: number, baseUrl: string, apiKey: st
   return res.json();
 }
 
-export async function testAIProvider(baseUrl: string, apiKey: string) {
+export async function testAIProvider(baseUrl: string, apiKey: string, provider: 'openai' | 'anthropic' | 'custom' = 'openai') {
   const res = await fetch(`${API}/config/ai-provider/test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ base_url: baseUrl, api_key: apiKey })
+    body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, ai_provider: provider })
   });
   return res.json();
 }

@@ -35,6 +35,7 @@ class AIProviderTest(BaseModel):
     """AI provider test request."""
     base_url: str
     api_key: str
+    ai_provider: str = "openai"  # "openai", "anthropic", or "custom"
 
 
 @router.post("/ai-provider")
@@ -130,34 +131,58 @@ def test_ai_provider(test_data: AIProviderTest):
     if not test_data.api_key:
         raise HTTPException(status_code=400, detail="API key is required")
 
-    headers = {
-        "Authorization": f"Bearer {test_data.api_key}",
-        "Content-Type": "application/json",
-    }
-
-    # Prepare test request payload
-    payload = {
-        "model": "gpt-3.5-turbo",
-        "messages": [{"role": "user", "content": "test"}],
-        "max_tokens": 10,
-    }
-
     try:
+        if test_data.ai_provider == "anthropic":
+            # Test Anthropic API
+            headers = {
+                "x-api-key": test_data.api_key,
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+            payload = {
+                "model": "claude-3-haiku-20240307",
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 10
+            }
+            url = f"{test_data.base_url.rstrip('/')}/v1/messages"
+
+        else:
+            # Test OpenAI or Custom (OpenAI-compatible)
+            headers = {
+                "Authorization": f"Bearer {test_data.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 10,
+            }
+            url = f"{test_data.base_url.rstrip('/')}/chat/completions"
+
         # Attempt to call the AI provider
-        response = requests.post(
-            f"{test_data.base_url.rstrip('/')}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=10,
-        )
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
 
         # Consider 200-299 as success
         success = 200 <= response.status_code < 300
 
+        if not success:
+            # Include error details for debugging
+            try:
+                error_detail = response.json()
+                error_msg = error_detail.get('error', {}).get('message', response.text[:200])
+            except:
+                error_msg = response.text[:200]
+
+            return {
+                "success": False,
+                "status_code": response.status_code,
+                "message": f"Failed: {error_msg}",
+            }
+
         return {
-            "success": success,
+            "success": True,
             "status_code": response.status_code,
-            "message": "Connection successful" if success else f"Failed with status {response.status_code}",
+            "message": "✓ Connection successful! API key is valid.",
         }
 
     except requests.Timeout:

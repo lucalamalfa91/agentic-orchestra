@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { saveAIProvider, testAIProvider } from '../lib/api/auth';
+import { saveAIProvider, testAIProvider, getAIProviderConfig } from '../lib/api/auth';
 import { useAuth } from '../hooks/useAuth';
 
 export default function AIProviderSetup() {
@@ -14,6 +14,45 @@ export default function AIProviderSetup() {
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [hasExistingConfig, setHasExistingConfig] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+
+  // Load existing configuration on mount
+  useEffect(() => {
+    if (user?.id) {
+      loadExistingConfig();
+    }
+  }, [user?.id]);
+
+  const loadExistingConfig = async () => {
+    if (!user?.id) return;
+
+    try {
+      const config = await getAIProviderConfig(user.id);
+      if (config.configured && config.base_url) {
+        setHasExistingConfig(true);
+        setBaseUrl(config.base_url);
+
+        // Detect provider from base_url or use returned ai_provider
+        const detectedProvider = config.ai_provider || detectProviderFromUrl(config.base_url);
+        setProvider(detectedProvider as 'openai' | 'anthropic' | 'custom');
+
+        // Test existing configuration
+        setIsTestingConnection(true);
+        // Note: Can't test without API key, will show status message instead
+        setMessage('✓ Configuration found! Update the fields below to modify it.');
+        setIsTestingConnection(false);
+      }
+    } catch (error) {
+      console.error('Failed to load existing config:', error);
+    }
+  };
+
+  const detectProviderFromUrl = (url: string): string => {
+    if (url.includes('anthropic.com')) return 'anthropic';
+    if (url.includes('openai.com')) return 'openai';
+    return 'custom';
+  };
 
   // Update base URL when provider changes
   const handleProviderChange = (newProvider: 'openai' | 'anthropic' | 'custom') => {
@@ -32,10 +71,10 @@ export default function AIProviderSetup() {
     setLoading(true);
     setMessage('');
     try {
-      const res = await testAIProvider(baseUrl, apiKey);
-      setMessage(res.success ? '✓ Connection successful!' : '✗ Connection failed');
-    } catch {
-      setMessage('✗ Error testing connection');
+      const res = await testAIProvider(baseUrl, apiKey, provider);
+      setMessage(res.success ? res.message || '✓ Connection successful!' : `✗ ${res.message || 'Connection failed'}`);
+    } catch (error) {
+      setMessage(`✗ Error testing connection: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
     setLoading(false);
   };
@@ -106,6 +145,28 @@ export default function AIProviderSetup() {
         </div>
 
         <div className="space-y-6">
+          {/* Existing Configuration Status */}
+          {hasExistingConfig && (
+            <div
+              className="p-4 rounded-lg border animate-slide-up"
+              style={{
+                background: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                color: 'var(--color-success)'
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <div className="text-xl">✓</div>
+                <div>
+                  <div className="font-semibold mb-1">Active Configuration Found</div>
+                  <div className="text-sm opacity-90">
+                    You already have an AI provider configured. Update the fields below to modify your configuration.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* AI Provider Selection */}
           <div>
             <label
