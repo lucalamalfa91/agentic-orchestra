@@ -85,7 +85,8 @@ async def error_handler(state: OrchestraState) -> OrchestraState:
     # Log all errors from state["errors"]
     for agent_name, error_msg in state["errors"].items():
         if error_msg:
-            logger.error(f"  - {agent_name}: {error_msg}")
+            # Use % formatting to avoid f-string issues with braces in error_msg
+            logger.error("  - %s: %s", agent_name, error_msg)
 
     state["current_step"] = "FAILED"
     state["completed_steps"].append("error_handler")

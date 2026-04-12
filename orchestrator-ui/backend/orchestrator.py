@@ -375,7 +375,7 @@ class GenerationOrchestrator:
                 crud.create_generation_log(
                     db=db, project_id=project.id,
                     step_name="error", status="failed",
-                    message=f"Validation error: {str(e)[:500]}",
+                    message="Validation error: " + str(e)[:500].replace("{", "{{").replace("}", "}}"),
                     generation_attempt=generation_attempt
                 )
             await self._close_websocket_gracefully(generation_id, 1011, "Validation error")
@@ -394,9 +394,11 @@ class GenerationOrchestrator:
                     )
                     db.commit()
                 except Exception as db_error:
-                    logger.error(f"Failed to save error state to DB: {db_error}")
+                    logger.error("Failed to save error state to DB: %s", db_error)
                     db.rollback()
-            await self._close_websocket_gracefully(generation_id, 1011, f"Internal error: {str(e)[:100]}")
+            # Escape braces in error message to avoid f-string issues
+            error_msg = str(e)[:100].replace("{", "{{").replace("}", "}}")
+            await self._close_websocket_gracefully(generation_id, 1011, f"Internal error: {error_msg}")
             return None
 
     async def _run_generation_internal(
@@ -557,7 +559,7 @@ class GenerationOrchestrator:
                     generation_attempt=generation_attempt
                 )
             await self.broadcast_progress(
-                generation_id, "error", 0, 0, f"Exception: {str(e)}"
+                generation_id, "error", 0, 0, "Exception: " + str(e).replace("{", "{{").replace("}", "}}")
             )
             return None
 
