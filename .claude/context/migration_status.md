@@ -135,9 +135,18 @@
 
 ### Start Backend
 ```bash
+# Option 1: Use startup script (recommended)
+bash start-backend.sh
+
+# Option 2: Manual start
 cd orchestrator-ui/backend
 export PYTHONPATH=$(pwd)/../..
 python main.py
+
+# Option 3: Background (for testing/development)
+cd orchestrator-ui/backend
+export PYTHONPATH=$(pwd)/../..
+python main.py > backend.log 2>&1 &
 ```
 
 ### Start Frontend
