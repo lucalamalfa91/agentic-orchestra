@@ -108,13 +108,13 @@ class OrchestraState(TypedDict):
 
     # Producer: Backlog Agent → Consumer: Project Manager, Requirements Agent
     # List of user stories/tasks
-    # Annotated with operator.add to merge lists from parallel agents
-    backlog_items: Annotated[list | None, operator.add]
+    # Annotated to merge lists from parallel agents (handles None)
+    backlog_items: Annotated[list | None, lambda x, y: (x or []) + (y or [])]
 
     # Producer: Knowledge Agent (RAG) → Consumer: All agents
     # List of knowledge fragments injected into agent prompts
-    # Annotated with operator.add to merge RAG docs from parallel agents
-    rag_context: Annotated[list | None, operator.add]
+    # Annotated to merge RAG docs from parallel agents (handles None)
+    rag_context: Annotated[list | None, lambda x, y: (x or []) + (y or [])]
 
     # ===== ORCHESTRATION STATE =====
 
@@ -125,16 +125,16 @@ class OrchestraState(TypedDict):
 
     # Producer: Orchestrator → Consumer: Orchestrator (tracks progress)
     # List of successfully completed agent names
-    # Annotated with operator.add to merge lists from parallel agents
-    completed_steps: Annotated[list[str], operator.add]
+    # Annotated to merge lists from parallel agents (handles None/empty)
+    completed_steps: Annotated[list[str], lambda x, y: (x or []) + (y or [])]
 
     # Producer: Orchestrator → Consumer: WebSocket handler
     # Dict mapping agent_name → AgentStatus value
-    # Annotated to merge dicts from parallel agents
-    agent_statuses: Annotated[dict[str, str], lambda x, y: {**x, **y}]
+    # Annotated to merge dicts from parallel agents (handles None)
+    agent_statuses: Annotated[dict[str, str], lambda x, y: {**(x or {}), **(y or {})}]
 
     # Producer: Any agent (on error) → Consumer: Orchestrator
     # Dict mapping agent_name → error message string
     # Agents set errors[agent_name] and return state instead of raising
-    # Annotated to merge error dicts from parallel agents
-    errors: Annotated[dict[str, str], lambda x, y: {**x, **y}]
+    # Annotated to merge error dicts from parallel agents (handles None)
+    errors: Annotated[dict[str, str], lambda x, y: {**(x or {}), **(y or {})}]
