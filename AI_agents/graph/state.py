@@ -75,46 +75,46 @@ class OrchestraState(TypedDict):
 
     # Producer: Requirements Agent → Consumer: Architect Agent
     # Annotated to handle parallel agents returning full state
-    parsed_requirements: Optional[Annotated[dict, lambda x, y: x or y]]
+    parsed_requirements: Annotated[dict | None, lambda x, y: x or y]
 
     # Producer: Architect Agent → Consumer: Backend, Frontend, DevOps Agents
     # Annotated to handle parallel agents returning full state
-    design_yaml: Optional[Annotated[dict, lambda x, y: x or y]]
+    design_yaml: Annotated[dict | None, lambda x, y: x or y]
 
     # Producer: Architect Agent (extracts from design_yaml) → Consumer: Backend Agent
     # Annotated to handle parallel agents returning full state
-    api_schema: Optional[Annotated[list, lambda x, y: x or y]]
+    api_schema: Annotated[list | None, lambda x, y: x or y]
 
     # Producer: Architect Agent (extracts from design_yaml) → Consumer: Backend Agent
     # Annotated to handle parallel agents returning full state
-    db_schema: Optional[Annotated[list, lambda x, y: x or y]]
+    db_schema: Annotated[list | None, lambda x, y: x or y]
 
     # Producer: Backend Agent → Consumer: Publish Agent
     # Dict structure: {file_path: code_content}
     # Annotated to handle parallel agents returning full state
-    backend_code: Optional[Annotated[dict, lambda x, y: x or y]]
+    backend_code: Annotated[dict | None, lambda x, y: x or y]
 
     # Producer: Frontend Agent → Consumer: Publish Agent
     # Dict structure: {file_path: code_content}
     # Annotated to handle parallel agents returning full state
-    frontend_code: Optional[Annotated[dict, lambda x, y: x or y]]
+    frontend_code: Annotated[dict | None, lambda x, y: x or y]
 
     # Producer: DevOps Agent → Consumer: Publish Agent
     # Dict structure: {workflow_name: workflow_yaml}
     # Annotated to handle parallel agents returning full state
-    devops_config: Optional[Annotated[dict, lambda x, y: x or y]]
+    devops_config: Annotated[dict | None, lambda x, y: x or y]
 
     # ===== SUPPORTING SYSTEMS =====
 
     # Producer: Backlog Agent → Consumer: Project Manager, Requirements Agent
     # List of user stories/tasks
     # Annotated with operator.add to merge lists from parallel agents
-    backlog_items: Optional[Annotated[list, operator.add]]
+    backlog_items: Annotated[list | None, operator.add]
 
     # Producer: Knowledge Agent (RAG) → Consumer: All agents
     # List of knowledge fragments injected into agent prompts
     # Annotated with operator.add to merge RAG docs from parallel agents
-    rag_context: Optional[Annotated[list, operator.add]]
+    rag_context: Annotated[list | None, operator.add]
 
     # ===== ORCHESTRATION STATE =====
 
