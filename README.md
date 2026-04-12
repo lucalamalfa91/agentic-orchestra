@@ -20,7 +20,8 @@ bash check_setup.sh
 
 # 3. Setup environment (first time only)
 cp .env.example .env
-# Edit .env with your credentials (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, AI_BASE_URL, AI_API_KEY)
+# Edit .env with GitHub OAuth credentials (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET)
+# Note: AI provider (API key) is configured later from the UI Settings screen
 
 # 4. Install dependencies (first time only)
 pip install -r requirements.txt
@@ -43,8 +44,12 @@ bash start-frontend.sh
 
 ### First Generation
 
-1. Connect GitHub account
-2. Configure AI Provider (Base URL + API Key)
+1. Connect GitHub account (GitHub OAuth)
+2. **Configure AI Provider** in Settings:
+   - Click Settings icon
+   - Enter Base URL (e.g., `https://api.anthropic.com` for Claude)
+   - Enter API Key
+   - Click Save (key is encrypted and stored securely)
 3. Enter app description: "Weather app with 7-day forecast"
 4. Click Generate → Watch progress → View repo on GitHub
 
@@ -91,13 +96,10 @@ Each node's output feeds the next in a LangGraph-orchestrated pipeline from requ
 ## Environment Variables
 
 ```bash
-# Required
-GITHUB_CLIENT_ID=...
+# Required (in .env file)
+GITHUB_CLIENT_ID=...           # GitHub OAuth App credentials
 GITHUB_CLIENT_SECRET=...
-AI_BASE_URL=https://api.openai.com/v1  # or compatible endpoint
-AI_API_KEY=sk-...
-JWT_SECRET=your-secret-min-32-chars
-ENCRYPTION_KEY=your-encryption-key
+JWT_SECRET=your-secret-min-32-chars  # For JWT token signing
 
 # Optional (for deployment features)
 VERCEL_CLIENT_ID=...
@@ -105,6 +107,10 @@ VERCEL_CLIENT_SECRET=...
 RAILWAY_CLIENT_ID=...
 RAILWAY_CLIENT_SECRET=...
 ```
+
+**Note**:
+- **AI Provider** (Base URL + API Key) is configured from UI Settings, not .env
+- **ENCRYPTION_KEY** is auto-generated at first startup and saved in `database/encryption.key` (not in .env)
 
 ---
 
@@ -176,18 +182,21 @@ bash start-backend.sh
 
 ## Security
 
-- **API Keys**: Encrypted with Fernet (ENCRYPTION_KEY)
-- **JWT**: HS256, 24h expiration (JWT_SECRET)
-- **CORS**: Configure `allow_origins` for production
-- **Generated Code**: Review for vulnerabilities before deployment
+- **API Keys**: Encrypted with Fernet and stored in database
+  - Encryption key auto-generated in `database/encryption.key` (persistent, not in git)
+  - Keys encrypted at rest, decrypted only when needed for generation
+- **JWT**: HS256, 24h expiration (JWT_SECRET in .env)
+- **CORS**: Configure `allow_origins` for production (currently allows all for dev)
+- **Generated Code**: Always review for vulnerabilities before deployment
 
 **Pre-Production Checklist**
-- [ ] Strong JWT_SECRET (32+ random chars)
-- [ ] Strong ENCRYPTION_KEY
+- [ ] Strong JWT_SECRET (32+ random chars, in .env)
+- [ ] Backup `database/encryption.key` securely (required to decrypt API keys)
 - [ ] CORS restricted to production domain
 - [ ] HTTPS enabled
 - [ ] Security audit on generated code
 - [ ] Rate limiting enabled
+- [ ] Move database to PostgreSQL with encrypted connections
 
 ---
 
