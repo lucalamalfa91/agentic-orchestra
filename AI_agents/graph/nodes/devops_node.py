@@ -330,7 +330,7 @@ No markdown, no explanations.
         except json.JSONDecodeError as e:
             logger.error(f"[devops_agent] JSON parse error: {e}")
             logger.error(f"[devops_agent] Raw output (first 500 chars): {raw[:500]}")
-            raise ValueError(f"Failed to parse DevOps config JSON: {e}")
+            raise ValueError("Failed to parse JSON: " + str(e).replace("{", "{{").replace("}", "}}"))
         except Exception as e:
             logger.error(f"[devops_agent] Unexpected error parsing output: {e}")
             raise

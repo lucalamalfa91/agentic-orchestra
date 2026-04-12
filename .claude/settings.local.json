@@ -72,7 +72,10 @@
       "Bash(bash:*)",
       "Bash(xargs:*)",
       "Bash(alembic upgrade:*)",
-      "Bash(alembic current:*)"
+      "Bash(alembic current:*)",
+      "Bash(PYTHONPATH=../.. python:*)",
+      "Bash(PYTHONPATH=../.. timeout 5 python:*)",
+      "Bash(PYTHONPATH=../.. timeout 3 python:*)"
     ]
   }
 }

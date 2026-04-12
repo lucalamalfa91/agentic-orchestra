@@ -1,170 +1,208 @@
-# Migration Status - 2026-04-11 Session
+# Migration Status - 2026-04-12 Session
 
-## ✅ Session Completed: Database Fix + Automode
+## ✅ Session Completed: Persistent Encryption Key Management
 
-### Issues Fixed
+### Problem Fixed
 
-1. **Projects Loading Failure** ✅
-   - **Problem**: `/api/projects/` returned HTTP 500 Internal Server Error
-   - **Root Cause**: Database empty (no tables), relative path caused dual databases
-   - **Fix**: Initialized database, consolidated to single file with absolute path
-   - **Test**: `curl http://localhost:8000/api/projects/` → `{"items":[],"total":0,...}` ✅
+**Issue**: ENCRYPTION_KEY lost, projects not visible
+- ENCRYPTION_KEY in `.env` was placeholder "your-encryption-key-here"
+- API keys in DB encrypted with old key → unreadable
+- Key lost on git pull/reset → data permanently inaccessible
+- Manual key management error-prone
 
-2. **API Key Save Failure** ✅
-   - **Problem**: Settings screen couldn't save AI provider configuration
-   - **Root Cause**: Same as #1 - `configurations` table didn't exist
-   - **Fix**: Database initialization created all required tables
-   - **Test**: POST → `{"status":"saved","config_id":1}` ✅
+### Solution Implemented
 
-### Files Modified
+**Persistent encryption key storage**:
+- New file: `database/encryption.key` (auto-generated, persistent)
+- Not in git (`.gitignore`)
+- Same lifecycle as database
+- Auto-initialized on first backend startup
 
-- `.env` - Commented DATABASE_URL to use absolute path default
-- `.claude/context/database_fix_2026-04-11.md` - Complete documentation
+**Files Created/Modified**:
+1. `orchestrator-ui/backend/encryption_init.py` (NEW)
+   - `ensure_encryption_key()`: Auto-generates key on first run
+   - `get_encryption_key()`: Reads from persistent file
+   - Windows-safe (no unicode in print statements)
 
-### Database Status
+2. `orchestrator-ui/backend/encryption_service.py`
+   - Now uses `encryption_init.get_encryption_key()`
+   - No longer reads from `.env`
 
-**Location**: `database/orchestrator.db` (absolute path from project root)
+3. `orchestrator-ui/backend/main.py`
+   - Added `ensure_encryption_key()` to lifespan handler
+   - Runs before `init_db()`
 
-**Tables** (7):
-- `projects` ✅
-- `project_requirements` ✅
-- `generation_logs` ✅
-- `users` ✅
-- `configurations` ✅
-- `deploy_provider_auth` ✅
-- `knowledge_source_configs` ✅
+4. `.gitignore`
+   - Added explicit `database/encryption.key` exclusion
 
-**Initialization**: Automatic via `main.py` lifespan handler
+### Migration Actions Taken
 
-### Backend Status
+1. Generated new `database/encryption.key` (44 bytes, valid Fernet key)
+2. Deleted old encrypted configuration (criptata con vecchia chiave)
+3. Tested encryption/decryption flow ✅
+4. Tested backend startup ✅
+5. Tested `/api/projects/` endpoint ✅
 
-**Running**: ✅ (Port 8000)
-**Database Connection**: ✅ (Using correct database with all tables)
-**Endpoints Tested**:
-- `GET /api/projects/` ✅
-- `POST /api/config/ai-provider` ✅
-- `GET /api/config/ai-provider?user_id=1` ✅
+### Commit
 
----
-
-## 📋 Next Steps (For Next Session)
-
-### High Priority
-- [ ] Test frontend completely (browse to http://localhost:5173)
-- [ ] Verify project creation flow end-to-end
-- [ ] Verify API key test connection button works
-- [ ] Test generation flow with real AI provider
-
-### Medium Priority
-- [ ] Add database schema health check endpoint
-- [ ] Create Alembic migrations for future schema changes
-- [ ] Document database setup in main README
-- [ ] Add automated tests for API endpoints
-
-### Low Priority
-- [ ] Review and cleanup check_*.py and fix_*.py scripts
-- [ ] Consider PostgreSQL migration for production
-- [ ] Add database backup/restore scripts
+```
+74aaa50 fix: Persistent encryption key management
+```
 
 ---
 
-## 🔧 Troubleshooting Guide
+## 📋 Next Steps (For User)
 
-### If Projects Loading Fails Again
+### Immediate Actions Required
 
-1. Check which database is being used:
+1. **Start backend**:
    ```bash
    cd orchestrator-ui/backend
-   python -c "from database import engine; print(engine.url)"
-   ```
-
-2. Verify tables exist:
-   ```bash
-   sqlite3 ../../database/orchestrator.db "SELECT name FROM sqlite_master WHERE type='table'"
-   ```
-
-3. Reinitialize if needed:
-   ```bash
-   python -c "import sys; sys.path.insert(0, '../..'); from database import init_db; init_db()"
-   ```
-
-4. Restart backend:
-   ```bash
    export PYTHONPATH=$(pwd)/../..
    python main.py
    ```
 
-### If API Key Save Fails
-
-1. Verify `configurations` table exists (see step 2 above)
-2. Check user exists:
-   ```sql
-   sqlite3 database/orchestrator.db "SELECT * FROM users WHERE id=1"
+2. **Start frontend**:
+   ```bash
+   cd orchestrator-ui/frontend
+   npm run dev
    ```
-3. If no users, create one via GitHub auth flow first
+
+3. **Configure API key** (one-time):
+   - Open http://localhost:5173
+   - Go to Settings
+   - Enter Anthropic API key
+   - Save configuration
+
+4. **Verify projects visible**:
+   - Should see 1 project: "Generated App - 5dcce548" (status: failed)
+   - Can click to change status or view details
+
+### Files with Uncommitted Changes
+
+- `AI_agents/graph/state.py` - Annotated fields for parallel agents
+- `orchestrator-ui/backend/database.py` - Removed metadata.reflect()
+- `.claude/settings.local.json` - Local IDE settings (don't commit)
+
+**Decision needed**: Review and commit or discard these changes
 
 ---
 
-## 📝 Session Notes
+## 🔧 Architecture Notes
 
-- **Mode**: Automode (user not present)
-- **Duration**: ~2 hours
-- **Approach**: Systematic debugging from frontend → backend → database
-- **Key Learning**: Always use absolute paths for SQLite databases in multi-directory projects
-- **Commit**: 625c2fc - "docs: Add database initialization fix documentation"
+### Encryption Key Flow
+
+**Startup**:
+```
+1. main.py lifespan → ensure_encryption_key()
+2. Check if database/encryption.key exists
+3. If NO → generate new Fernet key → save to file
+4. If YES → validate key is correct format
+```
+
+**Runtime (API key save)**:
+```
+User enters API key in UI
+  ↓
+POST /api/config/ai-provider
+  ↓
+encryption_service.encrypt(api_key_plaintext)
+  ↓
+encryption_init.get_encryption_key() → reads database/encryption.key
+  ↓
+Fernet(key).encrypt() → ciphertext
+  ↓
+Save to DB: configurations.ai_api_key_encrypted = ciphertext
+```
+
+**Runtime (Generation)**:
+```
+Start generation
+  ↓
+orchestrator._inject_env_vars()
+  ↓
+Read configurations.ai_api_key_encrypted from DB
+  ↓
+encryption_service.decrypt(ciphertext)
+  ↓
+encryption_init.get_encryption_key() → reads database/encryption.key
+  ↓
+Fernet(key).decrypt() → plaintext API key
+  ↓
+Set env var for LangGraph agents
+```
+
+### Why database/encryption.key?
+
+1. **Persistent**: Same lifecycle as database (in `database/` folder)
+2. **Not in git**: Protected by `.gitignore`
+3. **Auto-managed**: User never touches it manually
+4. **Separate from config**: `.env` for app config, encryption.key for crypto
+5. **Deploy-friendly**: Copy `database/` folder → everything works
 
 ---
 
 ## 🚀 Current State
 
-**Ready for**: Frontend testing, full generation flow testing
-**Blocked on**: Nothing - all blockers resolved
-**Backend**: Running and healthy
-**Database**: Initialized and connected
-**Frontend**: Not tested yet (assumed working, needs verification)
+**Backend**: ✅ Ready (tested, encryption key initialized)
+**Database**: ✅ 1 project present, no configurations (need reconfigure)
+**Frontend**: ⏳ Not tested yet (assume working)
+**Encryption**: ✅ Working (database/encryption.key exists and valid)
+
+**Blocked on**: Nothing - user needs to configure API key from UI
 
 ---
 
-**Status**: ✅ COMPLETE - All planned fixes applied and tested
-**Timestamp**: 2026-04-11 20:15 UTC
-**Next Action**: User should test frontend + run full generation flow
+## 🛡️ Security Improvements
+
+**Before**:
+- ❌ ENCRYPTION_KEY in .env (can be lost)
+- ❌ Placeholder keys causing errors
+- ❌ Manual key management
+
+**After**:
+- ✅ Persistent encryption key (auto-managed)
+- ✅ Never lost (not in git, in database/ folder)
+- ✅ Auto-initialized on first run
+- ✅ Clear error messages if missing
+- ✅ Separate from application config
 
 ---
 
-## Quick Start Commands (For User)
+---
 
-### Start Backend
-```bash
-# Option 1: Use startup script (recommended)
-bash start-backend.sh
+## 🔧 Session Update: 2026-04-12 12:00 UTC - Parallel Agent Fix
 
-# Option 2: Manual start
-cd orchestrator-ui/backend
-export PYTHONPATH=$(pwd)/../..
-python main.py
+### Issue Fixed
 
-# Option 3: Background (for testing/development)
-cd orchestrator-ui/backend
-export PYTHONPATH=$(pwd)/../..
-python main.py > backend.log 2>&1 &
+**LangGraph Error**: "Can receive only one value per step" for `parsed_requirements`
+- Backend/Frontend/DevOps run in parallel
+- When returning full state, LangGraph detected conflicting updates on non-Annotated fields
+
+### Solution
+
+**Added Annotated to all state fields** (`AI_agents/graph/state.py`):
+- All agent-produced fields: `parsed_requirements`, `design_yaml`, `api_schema`, `db_schema`, `backend_code`, `frontend_code`, `devops_config`
+- Orchestration fields: `current_step`, `completed_steps`, `agent_statuses`, `errors`
+- Reducer: `lambda x, y: x or y` (first non-None wins)
+- Lists: `operator.add` (merge)
+- Dicts: `lambda x, y: {**x, **y}` (merge keys)
+
+### Additional Fix
+
+**Removed metadata.reflect()** from `database.py`:
+- Caused ORM relationship errors
+- Not needed with proper model definitions
+
+### Commits
+
 ```
-
-### Start Frontend
-```bash
-cd orchestrator-ui/frontend
-npm run dev
-```
-
-### Verify Everything Works
-```bash
-# Test backend
-curl http://localhost:8000/health
-curl http://localhost:8000/api/projects/
-
-# Open frontend
-open http://localhost:5173
+6b0ef1f fix: Add Annotated to all state fields for parallel agent support
+0a8cd82 fix: Remove metadata.reflect() from init_db
 ```
 
 ---
 
-**END OF SESSION**
+**Status**: ✅ COMPLETE - Ready for generation testing
+**Timestamp**: 2026-04-12 12:00 UTC
+**Next Action**: Test full generation flow from UI

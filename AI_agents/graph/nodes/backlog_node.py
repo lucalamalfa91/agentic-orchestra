@@ -272,7 +272,7 @@ Output ONLY the JSON structure with backlog items. No markdown, no explanations.
         except json.JSONDecodeError as e:
             logger.error(f"[backlog_agent] JSON parse error: {e}")
             logger.error(f"[backlog_agent] Raw output (first 500 chars): {raw[:500]}")
-            raise ValueError(f"Failed to parse backlog JSON: {e}")
+            raise ValueError("Failed to parse JSON: " + str(e).replace("{", "{{").replace("}", "}}"))
         except Exception as e:
             logger.error(f"[backlog_agent] Unexpected error parsing output: {e}")
             raise

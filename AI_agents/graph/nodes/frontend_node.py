@@ -291,7 +291,7 @@ Output ONLY the JSON structure with all file paths and code content. No markdown
         except json.JSONDecodeError as e:
             logger.error(f"[frontend_agent] JSON parse error: {e}")
             logger.error(f"[frontend_agent] Raw output (first 500 chars): {raw[:500]}")
-            raise ValueError(f"Failed to parse frontend code JSON: {e}")
+            raise ValueError("Failed to parse JSON: " + str(e).replace("{", "{{").replace("}", "}}"))
         except Exception as e:
             logger.error(f"[frontend_agent] Unexpected error parsing output: {e}")
             raise

@@ -26,6 +26,7 @@ import re
 from deepagents import create_deep_agent
 from AI_agents.utils.llm_client import get_llm_client
 from AI_agents.graph.state import OrchestraState, AgentStatus
+from AI_agents.graph.utils import escape_braces
 from mcp_servers.client import MCPClientManager
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ async def publish_node(state: OrchestraState) -> OrchestraState:
         llm = get_llm_client(provider, {"temperature": 0.1, "max_tokens": 4000})
     except Exception as e:
         logger.error(f"[publish_node] Failed to create LLM client: {e}")
-        state["errors"]["publish_agent"] = f"LLM client error: {str(e)}"
+        state["errors"]["publish_agent"] = "LLM client error: " + escape_braces(str(e))
         state["agent_statuses"]["publish_agent"] = AgentStatus.FAILED
         return state
 
@@ -80,7 +81,7 @@ async def publish_node(state: OrchestraState) -> OrchestraState:
         logger.info(f"[publish_node] Loaded {len(github_tools)} GitHub tools from MCP")
     except Exception as e:
         logger.error(f"[publish_node] Failed to load GitHub MCP tools: {e}")
-        state["errors"]["publish_agent"] = f"MCP GitHub tools error: {str(e)}"
+        state["errors"]["publish_agent"] = "MCP GitHub tools error: " + escape_braces(str(e))
         state["agent_statuses"]["publish_agent"] = AgentStatus.FAILED
         return state
 

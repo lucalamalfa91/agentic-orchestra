@@ -28,6 +28,7 @@ import re
 from deepagents import create_deep_agent
 from AI_agents.utils.llm_client import get_llm_client
 from AI_agents.graph.state import OrchestraState, AgentStatus
+from AI_agents.graph.utils import escape_braces
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ async def design_node(state: OrchestraState) -> OrchestraState:
         logger.error(f"[design_node] Exception type: {type(e).__name__}")
         logger.error(f"[design_node] Exception message: {e}")
         logger.error(f"[design_node] Full traceback:\n{tb}")
-        state["errors"]["design"] = f"LLM client error: {str(e)}"
+        state["errors"]["design"] = "LLM client error: " + escape_braces(str(e))
         state["agent_statuses"]["design"] = AgentStatus.FAILED
         return state
 
@@ -112,7 +113,7 @@ async def design_node(state: OrchestraState) -> OrchestraState:
         tb = traceback.format_exc()
         logger.error(f"[design_node] ✗ Failed to create Deep Agent: {e}")
         logger.error(f"[design_node] Full traceback:\n{tb}")
-        state["errors"]["design"] = f"Deep Agent creation error: {str(e)}"
+        state["errors"]["design"] = "Deep Agent creation error: " + escape_braces(str(e))
         state["agent_statuses"]["design"] = AgentStatus.FAILED
         return state
 
@@ -208,7 +209,7 @@ Return ONLY the JSON object, optionally wrapped in ```json markdown fences.
         logger.error(f"[design_node] Exception: {e}")
         logger.error(f"[design_node] Failed to parse: {json_str[:500]}...")
         logger.error(f"[design_node] Full traceback:\n{tb}")
-        state["errors"]["design"] = f"Failed to parse JSON design: {str(e)}"
+        state["errors"]["design"] = "Failed to parse JSON design: " + escape_braces(str(e))
         state["agent_statuses"]["design"] = AgentStatus.FAILED
 
     except Exception as e:
