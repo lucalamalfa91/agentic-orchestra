@@ -1,16 +1,17 @@
 """
 Encryption service for sensitive data like API keys.
+Uses persistent key from database/encryption.key instead of .env.
 """
 from cryptography.fernet import Fernet
-import os
+from encryption_init import get_encryption_key as _get_key
 
 
 def get_encryption_key():
-    """Get encryption key from environment variable."""
-    key = os.getenv("ENCRYPTION_KEY")
-    if not key:
-        raise ValueError("ENCRYPTION_KEY environment variable is not set")
-    return key.encode()
+    """
+    Get encryption key from persistent file.
+    Uses encryption_init.get_encryption_key() which reads from database/encryption.key.
+    """
+    return _get_key()
 
 
 def encrypt(plaintext: str) -> str:

@@ -13,13 +13,16 @@ load_dotenv(env_path)
 
 try:
     from orchestrator_ui.backend.database import init_db
+    from orchestrator_ui.backend.encryption_init import ensure_encryption_key
     from orchestrator_ui.backend.websocket import manager
     from orchestrator_ui.backend.api import projects, generation, auth, config, knowledge, generation_control
 except ModuleNotFoundError:
     import database
+    import encryption_init
     import websocket as ws_module
     from api import projects, generation, auth, config, knowledge, generation_control
     init_db = database.init_db
+    ensure_encryption_key = encryption_init.ensure_encryption_key
     manager = ws_module.manager
 
 
@@ -29,6 +32,7 @@ async def lifespan(app: FastAPI):
     Application lifespan handler - runs on startup and shutdown.
     """
     print("Starting Orchestrator UI Backend...")
+    ensure_encryption_key()
     init_db()
     print("Database initialized")
     yield
