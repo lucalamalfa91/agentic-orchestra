@@ -15,6 +15,7 @@ Modified: 2026-04-10 - Made language-agnostic
 from AI_agents.base_agent import BaseAgent
 from AI_agents.graph.state import OrchestraState
 import json
+from json_repair import repair_json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -246,8 +247,19 @@ Output ONLY the JSON structure with all file paths and code content. No markdown
                 if start_idx is not None and end_idx is not None:
                     cleaned = "\n".join(lines[start_idx:end_idx+1])
 
-            # Parse JSON
-            parsed = json.loads(cleaned)
+            # Parse JSON (with repair fallback)
+            try:
+                parsed = json.loads(cleaned)
+            except json.JSONDecodeError as json_err:
+                logger.warning(f"[backend_agent] JSON parse failed, attempting repair: {json_err}")
+                try:
+                    # Attempt to repair malformed JSON
+                    repaired = repair_json(cleaned)
+                    parsed = json.loads(repaired)
+                    logger.info("[backend_agent] JSON repaired successfully")
+                except Exception as repair_err:
+                    logger.error(f"[backend_agent] JSON repair also failed: {repair_err}")
+                    raise json_err  # Re-raise original error
 
             # Validate structure
             if "files" not in parsed:
