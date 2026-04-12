@@ -60,39 +60,49 @@ class OrchestraState(TypedDict):
     requirements: Annotated[str, lambda x, y: x or y]
 
     # Producer: Orchestrator → Consumer: All agents (for logging)
-    project_id: str
+    # Annotated to handle parallel agents (backend/frontend/backlog) returning full state
+    project_id: Annotated[str, lambda x, y: x or y]
 
     # Producer: Orchestrator → Consumer: Configuration lookup
-    user_id: str
+    # Annotated to handle parallel agents returning full state
+    user_id: Annotated[str, lambda x, y: x or y]
 
     # Producer: Orchestrator → Consumer: LLM client factory
-    ai_provider: str  # "openai" | "anthropic"
+    # Annotated to handle parallel agents returning full state
+    ai_provider: Annotated[str, lambda x, y: x or y]  # "openai" | "anthropic"
 
     # ===== AGENT-PRODUCED DATA =====
 
     # Producer: Requirements Agent → Consumer: Architect Agent
-    parsed_requirements: Optional[dict]
+    # Annotated to handle parallel agents returning full state
+    parsed_requirements: Optional[Annotated[dict, lambda x, y: x or y]]
 
     # Producer: Architect Agent → Consumer: Backend, Frontend, DevOps Agents
-    design_yaml: Optional[dict]
+    # Annotated to handle parallel agents returning full state
+    design_yaml: Optional[Annotated[dict, lambda x, y: x or y]]
 
     # Producer: Architect Agent (extracts from design_yaml) → Consumer: Backend Agent
-    api_schema: Optional[list]
+    # Annotated to handle parallel agents returning full state
+    api_schema: Optional[Annotated[list, lambda x, y: x or y]]
 
     # Producer: Architect Agent (extracts from design_yaml) → Consumer: Backend Agent
-    db_schema: Optional[list]
+    # Annotated to handle parallel agents returning full state
+    db_schema: Optional[Annotated[list, lambda x, y: x or y]]
 
     # Producer: Backend Agent → Consumer: Publish Agent
     # Dict structure: {file_path: code_content}
-    backend_code: Optional[dict]
+    # Annotated to handle parallel agents returning full state
+    backend_code: Optional[Annotated[dict, lambda x, y: x or y]]
 
     # Producer: Frontend Agent → Consumer: Publish Agent
     # Dict structure: {file_path: code_content}
-    frontend_code: Optional[dict]
+    # Annotated to handle parallel agents returning full state
+    frontend_code: Optional[Annotated[dict, lambda x, y: x or y]]
 
     # Producer: DevOps Agent → Consumer: Publish Agent
     # Dict structure: {workflow_name: workflow_yaml}
-    devops_config: Optional[dict]
+    # Annotated to handle parallel agents returning full state
+    devops_config: Optional[Annotated[dict, lambda x, y: x or y]]
 
     # ===== SUPPORTING SYSTEMS =====
 
@@ -110,17 +120,21 @@ class OrchestraState(TypedDict):
 
     # Producer: Orchestrator → Consumer: WebSocket handler
     # Name of currently executing agent
-    current_step: str
+    # Annotated to handle parallel agents returning full state
+    current_step: Annotated[str, lambda x, y: x or y]
 
     # Producer: Orchestrator → Consumer: Orchestrator (tracks progress)
     # List of successfully completed agent names
-    completed_steps: list[str]
+    # Annotated with operator.add to merge lists from parallel agents
+    completed_steps: Annotated[list[str], operator.add]
 
     # Producer: Orchestrator → Consumer: WebSocket handler
     # Dict mapping agent_name → AgentStatus value
-    agent_statuses: dict[str, str]
+    # Annotated to merge dicts from parallel agents
+    agent_statuses: Annotated[dict[str, str], lambda x, y: {**x, **y}]
 
     # Producer: Any agent (on error) → Consumer: Orchestrator
     # Dict mapping agent_name → error message string
     # Agents set errors[agent_name] and return state instead of raising
-    errors: dict[str, str]
+    # Annotated to merge error dicts from parallel agents
+    errors: Annotated[dict[str, str], lambda x, y: {**x, **y}]
