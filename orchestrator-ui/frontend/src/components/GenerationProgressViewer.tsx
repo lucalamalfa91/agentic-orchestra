@@ -124,7 +124,7 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
             fontSize: '0.875rem',
           }}
         >
-          {isConnected ? '[OK] Connected to ws://localhost:8000' : '[X] Disconnected'}
+          {isConnected ? '[OK] Connected' : '[X] Disconnected'}
         </div>
 
         {/* Overall Progress Bar */}

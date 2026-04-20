@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: agentic-orchestra-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # ── Secrets — set manually in Render dashboard ────────────────────────
+      - key: DATABASE_URL
+        sync: false
+
+      - key: ENCRYPTION_KEY
+        sync: false
+
+      - key: JWT_SECRET
+        sync: false
+
+      # ── Non-secret config ─────────────────────────────────────────────────
+      # WebSocket base URL — wss:// because Render terminates TLS
+      - key: WS_BASE_URL
+        value: wss://agentic-orchestra.onrender.com
+
+      # CORS: restrict to Vercel frontend only
+      - key: ALLOWED_ORIGINS
+        value: https://agentic-orchestra.vercel.app
+
+      - key: PYTHONPATH
+        value: /app

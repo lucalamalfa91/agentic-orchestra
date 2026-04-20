@@ -1,6 +1,7 @@
 """
 FastAPI main application for Orchestrator UI.
 """
+import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -47,12 +48,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
-# NOTE: allow_origins=["*"] is intentional for local development.
-# In production, set ALLOWED_ORIGINS env var and restore explicit list.
+# Configure CORS — set ALLOWED_ORIGINS env var in production (comma-separated URLs)
+_origins_raw = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _origins_raw.split(",") if o.strip()] or ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

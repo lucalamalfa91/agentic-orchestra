@@ -3,6 +3,8 @@
 import logging
 from typing import Any, Optional
 
+import os
+import sys
 import httpx
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -64,11 +66,17 @@ class MCPClientManager:
 
         server_config = self.SERVERS[server_name]
 
+        # Build env with project root in PYTHONPATH for subprocess
+        project_root = str(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        env = dict(os.environ)
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = f"{project_root}:{existing}" if existing else project_root
+
         # Create server parameters
         server_params = StdioServerParameters(
             command=server_config["command"],
             args=server_config["args"],
-            env=None  # Inherit environment (includes injected tokens)
+            env=env
         )
 
         # Connect to server
