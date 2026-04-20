@@ -5,7 +5,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useGenerationContext } from '../context/GenerationContext';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const WS_BASE  = API_BASE.replace(/^http/, 'ws');
 
 type Screen = 'creation' | 'progress' | 'confirmation' | 'deploy' | 'success';

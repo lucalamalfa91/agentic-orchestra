@@ -17,10 +17,12 @@ default_db_url = f"sqlite:///{db_dir / 'orchestrator.db'}"
 DATABASE_URL = os.getenv("DATABASE_URL", default_db_url)
 
 # Create SQLAlchemy engine
+_is_sqlite = DATABASE_URL.startswith("sqlite")
+_connect_args = {"check_same_thread": False} if _is_sqlite else {"sslmode": "require"}
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
-    echo=False  # Set to True for SQL query logging
+    connect_args=_connect_args,
+    echo=False
 )
 
 # Create session factory
