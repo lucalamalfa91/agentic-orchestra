@@ -41,9 +41,6 @@ class BacklogAgent(BaseAgent):
     def get_llm_config(self):
         return {"max_tokens": 3000}
 
-    def get_llm_config(self):
-        return {"max_tokens": 3000}
-
     def system_prompt(self) -> str:
         return """You are a product owner. Generate a concise product backlog as JSON.
 
