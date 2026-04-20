@@ -51,6 +51,12 @@ async def design_node(state: OrchestraState) -> OrchestraState:
     Returns:
         Updated state with design data or error information
     """
+    if state.get("design_yaml"):
+        logger.info("[design_node] design already present, skipping")
+        state["completed_steps"].append("design")
+        state["agent_statuses"]["design"] = AgentStatus.COMPLETED
+        return state
+
     logger.info("=" * 80)
     logger.info("[design_node] ▶ STARTING DESIGN GENERATION WITH DEEP AGENTS")
     logger.info("=" * 80)

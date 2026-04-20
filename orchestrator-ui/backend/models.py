@@ -172,3 +172,28 @@ class KnowledgeSourceConfig(Base):
 
     def __repr__(self):
         return f"<KnowledgeSourceConfig(id='{self.id}', user_id={self.user_id}, name='{self.name}', type='{self.source_type.value}')>"
+
+
+class ProjectArtifacts(Base):
+    """
+    Persists agent outputs per project/attempt so that Resume can skip
+    steps whose output was already generated in a previous run.
+    """
+    __tablename__ = "project_artifacts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    generation_attempt = Column(Integer, nullable=False, default=1)
+    design_yaml   = Column(Text, nullable=True)   # JSON
+    api_schema    = Column(Text, nullable=True)   # JSON
+    db_schema     = Column(Text, nullable=True)   # JSON
+    backend_code  = Column(Text, nullable=True)   # JSON
+    frontend_code = Column(Text, nullable=True)   # JSON
+    devops_config = Column(Text, nullable=True)   # JSON
+    backlog_items = Column(Text, nullable=True)   # JSON
+    updated_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    project = relationship("Project", backref="artifacts")
+
+    def __repr__(self):
+        return f"<ProjectArtifacts(project_id={self.project_id}, attempt={self.generation_attempt})>"

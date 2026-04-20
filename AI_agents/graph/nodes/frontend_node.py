@@ -45,6 +45,7 @@ class FrontendAgent(BaseAgent):
     """
 
     agent_name = "frontend_agent"
+    output_field = "frontend_code"
 
     def system_prompt(self) -> str:
         return """You are an expert polyglot frontend architect with deep knowledge of modern web frameworks and UI development.
