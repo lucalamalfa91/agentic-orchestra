@@ -287,6 +287,16 @@ class GenerationOrchestrator:
         self.requirements_file.write_text(content, encoding="utf-8")
         print(f"[OK] Written requirements to: {self.requirements_file}")
 
+    async def _close_websocket_gracefully(self, generation_id: str, code: int, reason: str):
+        """Close WebSocket connection gracefully."""
+        try:
+            await manager.broadcast(generation_id, {
+                "type": "error",
+                "message": reason,
+            })
+        except Exception:
+            pass
+
     async def broadcast_progress(self, generation_id, step, step_number, percentage, message):
         """Broadcast progress update via WebSocket."""
         await manager.broadcast(generation_id, {

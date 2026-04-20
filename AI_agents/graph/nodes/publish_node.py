@@ -64,6 +64,16 @@ async def publish_node(state: OrchestraState) -> OrchestraState:
         state["agent_statuses"]["publish_agent"] = AgentStatus.FAILED
         return state
 
+    # Check for a real GitHub token — skip publish gracefully if missing
+    import os as _os
+    github_token = _os.environ.get("GITHUB_TOKEN", "")
+    if not github_token or github_token.startswith("fake") or len(github_token) < 20:
+        logger.warning("[publish_node] No valid GitHub token — skipping GitHub publish")
+        logger.warning("[publish_node] Generated files are ready locally in pipeline_data/")
+        state["completed_steps"].append("publish_agent")
+        state["agent_statuses"]["publish_agent"] = AgentStatus.COMPLETED
+        return state
+
     # Get LLM client
     provider = state.get("ai_provider", "anthropic")
     try:
