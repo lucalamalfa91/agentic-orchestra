@@ -13,6 +13,7 @@ Created: Prompt 07d (2026-04-10)
 from AI_agents.base_agent import BaseAgent
 from AI_agents.graph.state import OrchestraState
 import json
+from json_repair import repair_json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,91 +37,31 @@ class BacklogAgent(BaseAgent):
 
     agent_name = "backlog_agent"
 
+    def get_llm_config(self):
+        return {"max_tokens": 3000}
+
     def system_prompt(self) -> str:
-        return """You are an expert product owner and agile coach specialized in breaking down requirements into actionable backlog items.
+        return """You are a product owner. Generate a concise product backlog as JSON.
 
-Your task is to generate a comprehensive product backlog based on the provided requirements and design specification.
-
-CRITICAL OUTPUT FORMAT:
-You must output ONLY valid JSON with this exact structure (no markdown, no extra text):
-{{
+Output ONLY valid JSON (no markdown, no extra text):
+{
   "items": [
-    {{
+    {
       "title": "As a user, I want to...",
-      "body": "## Description\\n...\\n\\n## Acceptance Criteria\\n- [ ] ...\\n- [ ] ...\\n\\n## Technical Notes\\n...",
+      "body": "## Acceptance Criteria\n- [ ] criterion 1\n- [ ] criterion 2",
       "labels": ["feature", "backend"],
       "priority": "high"
-    }}
+    }
   ]
-}}
+}
 
-REQUIREMENTS:
-1. Generate backlog items in these categories:
-   - **User Stories**: Features from end-user perspective (As a <role>, I want <goal>, so that <benefit>)
-   - **Technical Tasks**: Implementation tasks (Set up database, Configure CI/CD, etc.)
-   - **Testing Tasks**: QA and testing requirements (Write unit tests, E2E testing, etc.)
-   - **Documentation Tasks**: Docs that need to be written (API docs, user guide, README)
-   - **Technical Debt**: Known improvements (Refactor X, Optimize Y, etc.)
-
-2. Each backlog item must have:
-   - **title**: Clear, concise summary (50-80 chars)
-     - User stories: "As a [role], I want to [action]"
-     - Technical tasks: "[Action] [component]" (e.g., "Set up PostgreSQL database")
-   - **body**: Detailed description with:
-     - Description section (what and why)
-     - Acceptance Criteria (checklist with - [ ] format)
-     - Technical Notes (implementation hints, dependencies)
-   - **labels**: Array of relevant labels
-     - Type: feature, bug, enhancement, documentation, technical-debt, testing
-     - Component: frontend, backend, database, devops, api
-     - Priority level: P0, P1, P2, P3
-   - **priority**: "critical" | "high" | "medium" | "low"
-
-3. Backlog structure:
-   - Prioritize items (critical/high priority items first)
-   - Include 15-25 items total (comprehensive but manageable)
-   - Break large features into smaller stories (1-5 days each)
-   - Add dependencies in Technical Notes if needed
-
-4. User Story format:
-   - Title: "As a [user/admin/developer], I want to [action]"
-   - Body:
-     ```markdown
-     ## Description
-     [What the user wants to achieve and why it's valuable]
-
-     ## Acceptance Criteria
-     - [ ] [Specific, testable criterion]
-     - [ ] [Another criterion]
-
-     ## Technical Notes
-     - [Implementation hints]
-     - [Dependencies: "Requires #X to be completed"]
-     ```
-
-5. Technical Task format:
-   - Title: "[Action] [component]" (e.g., "Set up Entity Framework migrations")
-   - Body: Similar structure but focus on implementation details
-
-6. Label guidelines:
-   - Every item has at least 2 labels: [type] + [component]
-   - Add priority label: P0 (critical), P1 (high), P2 (medium), P3 (low)
-   - Optional: good-first-issue, help-wanted, security
-
-7. Priority assignment:
-   - **critical**: Core MVP features, blocking dependencies, security issues
-   - **high**: Important features, foundational infrastructure
-   - **medium**: Nice-to-have features, optimizations
-   - **low**: Polish, minor enhancements, future improvements
-
-OUTPUT RULES:
-- Output MUST be valid JSON only (no markdown fences, no explanations)
-- All backlog items in "items" array
-- Use \\n for newlines in body field (JSON escape)
-- Priority must be one of: critical, high, medium, low
-- Labels must be lowercase-with-hyphens
-
-If any requirement is unclear, make reasonable assumptions based on common product development practices.
+Rules:
+- Generate exactly 8-10 items total
+- Include: user stories, 2 technical setup tasks, 1 testing task
+- Keep body SHORT: only 2-3 acceptance criteria per item
+- priority: critical | high | medium | low
+- labels: lowercase-with-hyphens
+- Output MUST be valid JSON only
 """
 
     def build_input(self, state: OrchestraState) -> str:
@@ -236,8 +177,17 @@ Output ONLY the JSON structure with backlog items. No markdown, no explanations.
                 if start_idx is not None and end_idx is not None:
                     cleaned = "\n".join(lines[start_idx:end_idx+1])
 
-            # Parse JSON
-            parsed = json.loads(cleaned)
+            # Parse JSON (with repair fallback for truncated responses)
+            try:
+                parsed = json.loads(cleaned)
+            except json.JSONDecodeError as json_err:
+                logger.warning(f"[backlog_agent] JSON parse error: {json_err}, attempting repair")
+                try:
+                    repaired = repair_json(cleaned)
+                    parsed = json.loads(repaired)
+                    logger.info("[backlog_agent] JSON repaired successfully")
+                except Exception:
+                    raise json_err
 
             # Validate structure
             if "items" not in parsed:

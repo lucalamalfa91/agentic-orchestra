@@ -15,6 +15,7 @@ Created: Prompt 07e (2026-04-10)
 from AI_agents.base_agent import BaseAgent
 from AI_agents.graph.state import OrchestraState
 import json
+from json_repair import repair_json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -304,8 +305,18 @@ No markdown, no explanations.
                 if start_idx is not None and end_idx is not None:
                     cleaned = "\n".join(lines[start_idx:end_idx+1])
 
-            # Parse JSON
-            parsed = json.loads(cleaned)
+            # Parse JSON (with repair fallback for control chars in YAML content)
+            try:
+                parsed = json.loads(cleaned)
+            except json.JSONDecodeError as json_err:
+                logger.warning(f"[devops_agent] JSON parse failed, attempting repair: {json_err}")
+                try:
+                    repaired = repair_json(cleaned)
+                    parsed = json.loads(repaired)
+                    logger.info("[devops_agent] JSON repaired successfully")
+                except Exception as repair_err:
+                    logger.error(f"[devops_agent] JSON repair also failed: {repair_err}")
+                    raise json_err
 
             # Validate structure
             if "files" not in parsed:
