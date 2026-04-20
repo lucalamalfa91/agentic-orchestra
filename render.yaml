@@ -17,17 +17,7 @@ services:
       - key: JWT_SECRET
         sync: false
 
-      # GitHub OAuth App credentials (server-level — used for all user logins)
-      - key: GITHUB_CLIENT_ID
-        sync: false
-
-      - key: GITHUB_CLIENT_SECRET
-        sync: false
-
-      # ── Non-secret config — update URLs after first deploy ────────────────
-      - key: GITHUB_REDIRECT_URI
-        value: https://agentic-orchestra.vercel.app/auth/callback
-
+      # ── Non-secret config ─────────────────────────────────────────────────
       # WebSocket base URL — wss:// because Render terminates TLS
       - key: WS_BASE_URL
         value: wss://agentic-orchestra.onrender.com
