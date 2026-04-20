@@ -42,3 +42,6 @@ PyGithub>=2.1.0
 # MCP Protocol
 mcp>=1.0.0
 deepagents
+
+# JSON utilities
+json-repair>=0.3.0
