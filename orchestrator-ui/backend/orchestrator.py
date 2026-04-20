@@ -497,7 +497,11 @@ class GenerationOrchestrator:
             # Load saved artifacts for resume mode (empty dict for new generations)
             saved_artifacts = {}
             if existing_project_id:
-                saved_artifacts = crud.get_project_artifacts(db, existing_project_id)
+                # generation_attempt is already the NEW attempt (incremented before resume call),
+                # so artifacts from the previous run live under generation_attempt - 1.
+                saved_artifacts = crud.get_project_artifacts(
+                    db, existing_project_id, for_attempt=generation_attempt - 1
+                )
                 if saved_artifacts:
                     logger.info(f"[orchestrator] Resume: found saved artifacts for {list(saved_artifacts.keys())}")
 

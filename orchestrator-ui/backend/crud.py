@@ -381,17 +381,19 @@ def upsert_project_artifacts(
     db.commit()
 
 
-def get_project_artifacts(db: Session, project_id: int) -> dict:
+def get_project_artifacts(db: Session, project_id: int, for_attempt: Optional[int] = None) -> dict:
     """
-    Load artifact outputs from the most recent generation attempt.
+    Load artifact outputs for a project.
     Returns a dict of {field_name: parsed_value} for populated fields only.
+    Pass for_attempt to override the attempt number (e.g. generation_attempt - 1 on resume).
     """
     project = db.query(models.Project).filter_by(id=project_id).first()
     if not project:
         return {}
+    attempt = for_attempt if for_attempt is not None else project.generation_attempt
     row = db.query(models.ProjectArtifacts).filter_by(
         project_id=project_id,
-        generation_attempt=project.generation_attempt
+        generation_attempt=attempt
     ).first()
     if not row:
         return {}
