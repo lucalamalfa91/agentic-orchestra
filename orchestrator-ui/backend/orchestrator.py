@@ -97,7 +97,7 @@ class GenerationOrchestrator:
             # Use raw SQL to bypass SQLAlchemy metadata cache issue
             from sqlalchemy import text
             config_result = db.execute(
-                text("SELECT ai_base_url, ai_api_key_encrypted, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = 1 LIMIT 1"),
+                text("SELECT ai_base_url, ai_api_key_encrypted, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
                 {"user_id": user_id}
             ).fetchone()
 

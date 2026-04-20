@@ -144,13 +144,13 @@ def github_login_with_gh(db: Session = Depends(get_db)):
             if not config_result:
                 # Create new config using raw SQL
                 db.execute(
-                    text("INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active) VALUES (:user_id, :base_url, :api_key, 'custom', 1)"),
+                    text("INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active) VALUES (:user_id, :base_url, :api_key, 'custom', true)"),
                     {"user_id": user.id, "base_url": ai_base_url, "api_key": encrypt(ai_api_key)}
                 )
             else:
                 # Update existing config
                 db.execute(
-                    text("UPDATE configurations SET is_active = 1 WHERE user_id = :user_id"),
+                    text("UPDATE configurations SET is_active = true WHERE user_id = :user_id"),
                     {"user_id": user.id}
                 )
             db.commit()
@@ -421,13 +421,13 @@ def poll_device_flow(request: DeviceFlowPollRequest, db: Session = Depends(get_d
             if not config_result:
                 # Create new config using raw SQL
                 db.execute(
-                    text("INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active) VALUES (:user_id, :base_url, :api_key, 'custom', 1)"),
+                    text("INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active) VALUES (:user_id, :base_url, :api_key, 'custom', true)"),
                     {"user_id": user.id, "base_url": ai_base_url, "api_key": encrypt(ai_api_key)}
                 )
             else:
                 # Update existing config
                 db.execute(
-                    text("UPDATE configurations SET is_active = 1 WHERE user_id = :user_id"),
+                    text("UPDATE configurations SET is_active = true WHERE user_id = :user_id"),
                     {"user_id": user.id}
                 )
             db.commit()
