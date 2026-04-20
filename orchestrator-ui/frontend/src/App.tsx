@@ -158,7 +158,7 @@ function AutoAuthWrapper() {
     setAttemptedAutoAuth(true);
     try {
       // Check if gh CLI is authenticated
-      const _apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const _apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
       const checkResponse = await fetch(`${_apiBase}/api/auth/github/check-gh`);
       const checkData = await checkResponse.json();
 

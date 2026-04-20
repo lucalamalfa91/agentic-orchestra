@@ -34,7 +34,7 @@ export default function AuthScreen() {
 
     const pollInterval = setInterval(async () => {
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/github/device-flow/poll`, {
+        const res = await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/auth/github/device-flow/poll`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ device_code: deviceFlow.deviceCode }),
@@ -71,7 +71,7 @@ export default function AuthScreen() {
 
     try {
       // Start device flow
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/github/device-flow/start`, {
+      const res = await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/auth/github/device-flow/start`, {
         method: 'POST',
       });
 

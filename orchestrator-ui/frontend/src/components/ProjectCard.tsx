@@ -21,7 +21,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onEdit, onViewProgre
     if (window.confirm('Are you sure you want to delete this project?')) {
       setIsDeleting(true);
       try {
-        await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/projects/${project.id}`, {
+        await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/projects/${project.id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('jwt_token')}`,

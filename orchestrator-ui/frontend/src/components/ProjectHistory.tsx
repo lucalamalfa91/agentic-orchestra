@@ -8,7 +8,7 @@ import ProjectCard from './ProjectCard';
 import GenerationProgressViewer from './GenerationProgressViewer';
 import { useGenerationContext } from '../context/GenerationContext';
 
-const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/^http/, 'ws');
+const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '').replace(/^http/, 'ws');
 
 interface ProjectHistoryProps {
   onEdit: (projectId: number) => void;

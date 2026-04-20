@@ -12,7 +12,7 @@ export default function DeployAuthScreen({ provider, onSuccess }: DeployAuthScre
   const handleAuthorize = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/deploy/${provider}/login`);
+      const res = await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/auth/deploy/${provider}/login`);
       const data = await res.json();
       window.location.href = data.url;
     } catch (error) {

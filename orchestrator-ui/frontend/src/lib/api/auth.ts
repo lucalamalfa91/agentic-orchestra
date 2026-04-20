@@ -1,4 +1,4 @@
-const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api";
+const API = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, '') + "/api";
 
 export async function getGitHubAuthUrl() {
   const res = await fetch(`${API}/auth/github/login`);
