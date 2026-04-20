@@ -7,7 +7,7 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      # ── Secrets — set manually in Render dashboard (not stored here) ──────
+      # ── Secrets — set manually in Render dashboard ────────────────────────
       - key: DATABASE_URL
         sync: false
 
@@ -17,49 +17,22 @@ services:
       - key: JWT_SECRET
         sync: false
 
-      - key: ADESSO_AI_HUB_KEY
-        sync: false
-
-      - key: ADESSO_BASE_URL
-        sync: false
-
+      # GitHub OAuth App credentials (server-level — used for all user logins)
       - key: GITHUB_CLIENT_ID
         sync: false
 
       - key: GITHUB_CLIENT_SECRET
         sync: false
 
-      - key: GITHUB_TOKEN
-        sync: false
-
-      # Optional: Vercel / Railway deploy integrations
-      - key: VERCEL_CLIENT_ID
-        sync: false
-
-      - key: VERCEL_CLIENT_SECRET
-        sync: false
-
-      - key: RAILWAY_CLIENT_ID
-        sync: false
-
-      - key: RAILWAY_CLIENT_SECRET
-        sync: false
-
       # ── Non-secret config — update URLs after first deploy ────────────────
       - key: GITHUB_REDIRECT_URI
         value: https://agentic-orchestra.vercel.app/auth/callback
 
-      - key: GITHUB_ORG
-        value: ""
-
-      - key: REPO_NAME
-        value: app-generated
-
-      # WebSocket base URL — use wss:// because Render always terminates TLS
+      # WebSocket base URL — wss:// because Render terminates TLS
       - key: WS_BASE_URL
         value: wss://agentic-orchestra.onrender.com
 
-      # CORS: only allow requests from the Vercel frontend
+      # CORS: restrict to Vercel frontend only
       - key: ALLOWED_ORIGINS
         value: https://agentic-orchestra.vercel.app
 
