@@ -36,6 +36,7 @@ class BacklogAgent(BaseAgent):
     """
 
     agent_name = "backlog_agent"
+    output_field = "backlog_items"
 
     def get_llm_config(self):
         return {"max_tokens": 3000}
