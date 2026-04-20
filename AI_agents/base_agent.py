@@ -61,7 +61,8 @@ class BaseAgent(ABC):
     """
 
     MAX_RETRIES: int = 2
-    agent_name: str = "base"  # override in subclass
+    agent_name: str = "base"   # override in subclass
+    output_field: str = ""     # OrchestraState key produced by this agent; used for resume skip
 
     def __init__(self):
         # LLM is lazy-initialized at invoke time so provider/key come from state
@@ -164,6 +165,14 @@ class BaseAgent(ABC):
             Updated OrchestraState (COMPLETED or FAILED)
         """
         logger = logging.getLogger(self.agent_name)
+
+        # Skip if output already present (resume mode)
+        if self.output_field and state.get(self.output_field):
+            logger.info(f"[{self.agent_name}] output already present, skipping")
+            state["completed_steps"].append(self.agent_name)
+            state["agent_statuses"][self.agent_name] = AgentStatus.COMPLETED
+            return state
+
         logger.info(f"[{self.agent_name}] starting")
 
         # Mark agent as running

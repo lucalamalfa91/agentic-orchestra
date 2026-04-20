@@ -48,6 +48,7 @@ class DevopsAgent(BaseAgent):
     """
 
     agent_name = "devops_agent"
+    output_field = "devops_config"
 
     def system_prompt(self) -> str:
         return """You are an expert DevOps engineer and infrastructure architect with deep knowledge of CI/CD, containerization, and cloud deployment.

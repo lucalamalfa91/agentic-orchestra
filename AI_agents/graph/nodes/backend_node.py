@@ -47,6 +47,7 @@ class BackendAgent(BaseAgent):
     """
 
     agent_name = "backend_agent"
+    output_field = "backend_code"
 
     def system_prompt(self) -> str:
         return """You are an expert polyglot backend architect with deep knowledge of modern web frameworks across all major programming languages.
