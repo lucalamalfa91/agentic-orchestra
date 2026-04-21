@@ -139,11 +139,12 @@ def get_llm_client(provider: str, config: Dict[str, Any] = None):
         # Get model from config or env var, with fallback chain
         model = config.get("model") or os.getenv("ANTHROPIC_MODEL")
         if not model:
-            model = "claude-3-haiku-20240307"
+            model = "claude-sonnet-4-6"
 
         logger.info(f"[llm_client] Creating Anthropic client: {model}")
 
-        # Enforce per-model output token limits (older Claude models cap at 4096)
+        # Enforce per-model output token limits for older models that cap at 4096.
+        # Newer models (claude-sonnet-4-6, claude-3-5-*) support 8K–64K and are uncapped.
         _ANTHROPIC_MAX_OUTPUT = {
             "claude-3-haiku-20240307": 4096,
             "claude-3-opus-20240229": 4096,
