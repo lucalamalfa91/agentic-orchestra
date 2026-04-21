@@ -321,20 +321,20 @@ class GenerationOrchestrator:
         """
         Map LangGraph event to step info for WebSocket broadcast.
 
-        Args:
-            event: LangGraph stream event
-
-        Returns:
-            Step info dict or None if event should be ignored
+        With stream_mode="updates", each event is {node_name: node_output}.
+        A node appearing as a key in the event means it just completed.
+        We return the first matching tracked node found in the event.
         """
-        # LangGraph events have structure: {node_name: {data}}
-        # We care about when nodes complete (have output data)
-
         for node_name, node_data in event.items():
-            if node_name in self.AGENT_TO_STEP and node_data:
-                # Check if this node just completed (has updated state)
-                if "completed_steps" in node_data and node_name in node_data["completed_steps"]:
-                    return self.AGENT_TO_STEP[node_name]
+            if node_name in self.AGENT_TO_STEP and node_data is not None:
+                step_info = self.AGENT_TO_STEP[node_name]
+                # Check if the node failed — if so, skip the "completed" broadcast
+                if isinstance(node_data, dict):
+                    node_errors = node_data.get("errors", {}) or {}
+                    if node_errors.get(node_name):
+                        logger.warning(f"[orchestrator] {node_name} reported error, skipping progress broadcast")
+                        return None
+                return step_info
 
         return None
 
@@ -348,61 +348,68 @@ class GenerationOrchestrator:
         request: schemas.GenerationRequest,
         db: Session,
         user_id: int = None,
-        existing_project_id: Optional[int] = None,  # NEW: for resume mode
-        timeout_seconds: int = 1800  # 30 minutes default timeout
+        existing_project_id: Optional[int] = None,
+        timeout_seconds: int = 1800
     ) -> Optional[int]:
         """
         Run LangGraph-based generation pipeline with WebSocket progress streaming.
 
-        Args:
-            generation_id: Unique generation session ID
-            request: User's generation request
-            db: Database session
-            user_id: User ID (optional, for token injection)
-            existing_project_id: Existing project ID for resume mode (optional)
-            timeout_seconds: Maximum generation time in seconds (default 30 min)
-
         Returns:
             Project ID if successful, None if failed
         """
-        project = None
-        generation_attempt = 1
+        # Shared context so the inner coroutine can expose project/attempt to the wrapper
+        ctx: dict = {"project": None, "generation_attempt": 1}
 
         try:
-            # Wrap entire generation in timeout
             return await asyncio.wait_for(
                 self._run_generation_internal(
-                    generation_id, request, db, user_id, existing_project_id, generation_attempt
+                    generation_id, request, db, user_id, existing_project_id, ctx
                 ),
                 timeout=timeout_seconds
             )
         except asyncio.TimeoutError:
             logger.error(f"Generation {generation_id} timed out after {timeout_seconds}s")
+            project = ctx["project"]
+            generation_attempt = ctx["generation_attempt"]
             if project:
-                crud.update_project_status(db, project.id, "failed")
-                crud.create_generation_log(
-                    db=db, project_id=project.id,
-                    step_name="error", status="failed",
-                    message=f"Generation timed out after {timeout_seconds} seconds",
-                    generation_attempt=generation_attempt
-                )
+                try:
+                    crud.update_project_status(db, project.id, "failed")
+                    crud.create_generation_log(
+                        db=db, project_id=project.id,
+                        step_name="error", status="failed",
+                        message=f"Generation timed out after {timeout_seconds} seconds",
+                        generation_attempt=generation_attempt
+                    )
+                    db.commit()
+                except Exception as db_err:
+                    logger.error("Failed to persist timeout state: %s", db_err)
+                    db.rollback()
             await self._close_websocket_gracefully(generation_id, 1011, "Generation timed out")
             return None
         except ValidationError as e:
             logger.error(f"Validation error in generation {generation_id}: {e}")
+            project = ctx["project"]
+            generation_attempt = ctx["generation_attempt"]
             if project:
-                crud.update_project_status(db, project.id, "failed")
-                crud.create_generation_log(
-                    db=db, project_id=project.id,
-                    step_name="error", status="failed",
-                    message="Validation error: " + str(e)[:500].replace("{", "{{").replace("}", "}}"),
-                    generation_attempt=generation_attempt
-                )
+                try:
+                    crud.update_project_status(db, project.id, "failed")
+                    crud.create_generation_log(
+                        db=db, project_id=project.id,
+                        step_name="error", status="failed",
+                        message="Validation error: " + str(e)[:500].replace("{", "{{").replace("}", "}}"),
+                        generation_attempt=generation_attempt
+                    )
+                    db.commit()
+                except Exception as db_err:
+                    logger.error("Failed to persist validation error: %s", db_err)
+                    db.rollback()
             await self._close_websocket_gracefully(generation_id, 1011, "Validation error")
             return None
         except Exception as e:
             tb = traceback.format_exc()
             logger.error(f"Exception during generation {generation_id}:\n{tb}")
+            project = ctx["project"]
+            generation_attempt = ctx["generation_attempt"]
             if project:
                 try:
                     crud.update_project_status(db, project.id, "failed")
@@ -413,10 +420,9 @@ class GenerationOrchestrator:
                         generation_attempt=generation_attempt
                     )
                     db.commit()
-                except Exception as db_error:
-                    logger.error("Failed to save error state to DB: %s", db_error)
+                except Exception as db_err:
+                    logger.error("Failed to save error state to DB: %s", db_err)
                     db.rollback()
-            # Escape braces in error message to avoid f-string issues
             error_msg = str(e)[:100].replace("{", "{{").replace("}", "}}")
             await self._close_websocket_gracefully(generation_id, 1011, f"Internal error: {error_msg}")
             return None
@@ -428,10 +434,11 @@ class GenerationOrchestrator:
         db: Session,
         user_id: Optional[int],
         existing_project_id: Optional[int],
-        generation_attempt: int
+        ctx: dict,
     ) -> Optional[int]:
-        """Internal generation logic without timeout wrapper."""
+        """Internal generation logic without timeout wrapper. Updates ctx['project'] and ctx['generation_attempt']."""
         project = None
+        generation_attempt = 1
 
         try:
             if existing_project_id:
@@ -440,6 +447,8 @@ class GenerationOrchestrator:
                 if not project:
                     raise ValueError(f"Project {existing_project_id} not found")
                 generation_attempt = project.generation_attempt
+                ctx["project"] = project
+                ctx["generation_attempt"] = generation_attempt
                 # Don't recreate requirements, already exist
                 # But still write requirements file for agents
                 requirements = crud.get_project_requirements(db, existing_project_id)
@@ -468,6 +477,8 @@ class GenerationOrchestrator:
                     requirements_text=requirements_text,
                 )
                 self.write_requirements_file(requirements_text)
+                ctx["project"] = project
+                ctx["generation_attempt"] = generation_attempt
 
             # Log start
             crud.create_generation_log(
@@ -526,11 +537,17 @@ class GenerationOrchestrator:
                 config={"configurable": {"thread_id": generation_id}},
                 stream_mode="updates",
             ):
-                print(f"[LangGraph Event] {event.keys()}")
+                print(f"[LangGraph Event] {list(event.keys())}")
 
-                # Persist artifacts to DB as each node completes
                 for node_name, node_data in event.items():
-                    if node_name in self.ARTIFACT_MAP and isinstance(node_data, dict):
+                    if not isinstance(node_data, dict):
+                        continue
+
+                    # Always track the latest node output as final_state candidate
+                    final_state = node_data
+
+                    # Persist artifacts to DB as each node completes
+                    if node_name in self.ARTIFACT_MAP:
                         fields = {
                             f: node_data[f]
                             for f in self.ARTIFACT_MAP[node_name]
@@ -545,7 +562,7 @@ class GenerationOrchestrator:
                             except Exception as ae:
                                 logger.warning(f"[orchestrator] Failed to save artifacts for {node_name}: {ae}")
 
-                # Map event to step info
+                # Map event to step info and broadcast progress
                 step_info = self._map_event_to_step_info(event)
 
                 if step_info:
@@ -564,31 +581,34 @@ class GenerationOrchestrator:
                         f"{current_step.capitalize()} generation completed",
                     )
 
-                # Store final state for error checking
-                for node_name, node_data in event.items():
-                    if isinstance(node_data, dict) and "errors" in node_data:
-                        final_state = node_data
-
             print(f"[OK] LangGraph execution completed for project {project.id}")
 
-            # Check for errors in final state
+            # Check for critical errors in final state
+            # Non-critical failures (backlog, publish) are logged but don't block success
+            CRITICAL_AGENTS = {"design", "backend_agent", "frontend_agent"}
             if final_state and final_state.get("errors"):
-                error_summary = ", ".join(
-                    f"{agent}: {msg}" for agent, msg in final_state["errors"].items()
-                )
-                print(f"[ERROR] Generation failed with errors: {error_summary}")
-                crud.update_project_status(db, project.id, "failed")
-                crud.create_generation_log(
-                    db=db, project_id=project.id,
-                    step_name=current_step, status="failed",
-                    message=error_summary[:500],
-                    generation_attempt=generation_attempt
-                )
-                await self.broadcast_progress(
-                    generation_id, "error", 0, 0,
-                    f"Generation failed: {error_summary[:400]}"
-                )
-                return None
+                all_errors = final_state["errors"]
+                critical_errors = {a: m for a, m in all_errors.items() if m and a in CRITICAL_AGENTS}
+                non_critical_errors = {a: m for a, m in all_errors.items() if m and a not in CRITICAL_AGENTS}
+
+                if non_critical_errors:
+                    logger.warning("[orchestrator] Non-critical agent errors (ignored): %s", list(non_critical_errors.keys()))
+
+                if critical_errors:
+                    error_summary = ", ".join(f"{a}: {m}" for a, m in critical_errors.items())
+                    print(f"[ERROR] Critical agent failures: {error_summary}")
+                    crud.update_project_status(db, project.id, "failed")
+                    crud.create_generation_log(
+                        db=db, project_id=project.id,
+                        step_name=current_step, status="failed",
+                        message=error_summary[:500],
+                        generation_attempt=generation_attempt
+                    )
+                    await self.broadcast_progress(
+                        generation_id, "error", 0, 0,
+                        f"Generation failed: {error_summary[:400]}"
+                    )
+                    return None
 
             # Success!
             crud.update_project_status(db, project.id, "completed")
@@ -599,17 +619,23 @@ class GenerationOrchestrator:
             return project.id
 
         except Exception as e:
-            import traceback
             tb = traceback.format_exc()
             print(f"[ERROR] Exception during generation:\n{tb}")
             if project:
-                crud.update_project_status(db, project.id, "failed")
-                crud.create_generation_log(
-                    db=db, project_id=project.id,
-                    step_name="error", status="failed",
-                    message=tb[:500],
-                    generation_attempt=generation_attempt
-                )
+                ctx["project"] = project
+                ctx["generation_attempt"] = generation_attempt
+                try:
+                    crud.update_project_status(db, project.id, "failed")
+                    crud.create_generation_log(
+                        db=db, project_id=project.id,
+                        step_name="error", status="failed",
+                        message=tb[:500],
+                        generation_attempt=generation_attempt
+                    )
+                    db.commit()
+                except Exception as db_err:
+                    logger.error("Failed to persist inner exception state: %s", db_err)
+                    db.rollback()
             await self.broadcast_progress(
                 generation_id, "error", 0, 0, "Exception: " + str(e).replace("{", "{{").replace("}", "}}")
             )

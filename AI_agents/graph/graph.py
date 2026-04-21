@@ -132,21 +132,32 @@ def fan_out_to_parallel_agents(state: OrchestraState):
 # Conditional routing
 # ============================================================================
 
+CRITICAL_AGENTS = {"design", "backend_agent", "frontend_agent"}
+
+
 def route_after_integration_check(
     state: OrchestraState,
 ) -> Literal["error_handler", "devops_agent"]:
     """
-    Route to error_handler if any agent failed, otherwise continue to devops.
+    Route to error_handler only if a critical agent failed.
+    Non-critical failures (backlog, publish) are logged but do not block devops.
     """
-    # Check if any error is non-empty
-    has_errors = any(error_msg for error_msg in state["errors"].values())
+    critical_errors = {
+        agent: msg
+        for agent, msg in state["errors"].items()
+        if msg and agent in CRITICAL_AGENTS
+    }
 
-    if has_errors:
-        logger.warning("Errors detected - routing to error_handler")
+    if critical_errors:
+        logger.warning("Critical agent failures detected, routing to error_handler: %s", list(critical_errors.keys()))
         return "error_handler"
-    else:
-        logger.info("All agents succeeded - routing to devops_agent")
-        return "devops_agent"
+
+    non_critical = {a: m for a, m in state["errors"].items() if m and a not in CRITICAL_AGENTS}
+    if non_critical:
+        logger.warning("Non-critical failures (ignored): %s", list(non_critical.keys()))
+
+    logger.info("Critical agents succeeded - routing to devops_agent")
+    return "devops_agent"
 
 
 # ============================================================================
@@ -249,11 +260,8 @@ async def get_app():
 
         # Build and compile graph
         graph_builder = create_graph()
-        _app = graph_builder.compile(
-            checkpointer=_checkpointer,
-            interrupt_before=["backend_agent"]  # Pause after design for human approval
-        )
-        logger.info("LangGraph app compiled with interrupt_before=['backend_agent']")
+        _app = graph_builder.compile(checkpointer=_checkpointer)
+        logger.info("LangGraph app compiled with PostgreSQL checkpointer")
 
     return _app
 
