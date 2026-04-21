@@ -504,6 +504,11 @@ class GenerationOrchestrator:
                 )
                 if saved_artifacts:
                     logger.info(f"[orchestrator] Resume: found saved artifacts for {list(saved_artifacts.keys())}")
+                    await self.broadcast_progress(
+                        generation_id, "resume_info", 0, 5,
+                        f"Resuming: skipping {len(saved_artifacts)} already-completed step(s) "
+                        f"({', '.join(saved_artifacts.keys())})",
+                    )
 
             # Build initial state (pre-populated with saved artifacts on resume)
             initial_state = self._build_initial_state(
@@ -518,7 +523,8 @@ class GenerationOrchestrator:
 
             async for event in langgraph_app.astream(
                 initial_state,
-                config={"configurable": {"thread_id": generation_id}}
+                config={"configurable": {"thread_id": generation_id}},
+                stream_mode="updates",
             ):
                 print(f"[LangGraph Event] {event.keys()}")
 

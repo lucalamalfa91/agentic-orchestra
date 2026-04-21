@@ -143,6 +143,19 @@ def get_llm_client(provider: str, config: Dict[str, Any] = None):
 
         logger.info(f"[llm_client] Creating Anthropic client: {model}")
 
+        # Enforce per-model output token limits (older Claude models cap at 4096)
+        _ANTHROPIC_MAX_OUTPUT = {
+            "claude-3-haiku-20240307": 4096,
+            "claude-3-opus-20240229": 4096,
+        }
+        model_limit = _ANTHROPIC_MAX_OUTPUT.get(model)
+        if model_limit and max_tokens > model_limit:
+            logger.warning(
+                f"[llm_client] max_tokens={max_tokens} exceeds limit for {model} "
+                f"({model_limit}), capping to {model_limit}"
+            )
+            max_tokens = model_limit
+
         # Create client with optional base_url
         kwargs = {
             "model": model,
