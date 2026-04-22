@@ -97,7 +97,7 @@ class GenerationOrchestrator:
             # Use raw SQL to bypass SQLAlchemy metadata cache issue
             from sqlalchemy import text
             config_result = db.execute(
-                text("SELECT ai_base_url, ai_api_key_encrypted, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
+                text("SELECT ai_base_url, ai_api_key_encrypted, ai_provider, ai_model FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
                 {"user_id": user_id}
             ).fetchone()
 
@@ -107,7 +107,7 @@ class GenerationOrchestrator:
                     "Please configure your AI provider in Settings before starting generation."
                 )
 
-            base_url, api_key_encrypted, ai_provider = config_result
+            base_url, api_key_encrypted, ai_provider, ai_model = config_result
             ai_provider = ai_provider or "openai"  # Graceful fallback
 
             # Decrypt and validate API key
@@ -163,7 +163,19 @@ class GenerationOrchestrator:
             os.environ["ADESSO_BASE_URL"] = base_url
             os.environ["ADESSO_AI_HUB_KEY"] = api_key
 
-            print(f"[OK] Injected AI config: provider={ai_provider}, base_url={base_url}, user_id={user_id}")
+            # Inject user-selected model so llm_client.py picks it up via env var
+            if ai_model:
+                if ai_provider == "anthropic":
+                    os.environ["ANTHROPIC_MODEL"] = ai_model
+                else:
+                    os.environ["OPENAI_MODEL"] = ai_model
+                print(f"[OK] Injected AI_MODEL={ai_model} for provider={ai_provider}")
+            else:
+                # Clear any stale value from a previous generation
+                os.environ.pop("ANTHROPIC_MODEL", None)
+                os.environ.pop("OPENAI_MODEL", None)
+
+            print(f"[OK] Injected AI config: provider={ai_provider}, model={ai_model or 'default'}, base_url={base_url}, user_id={user_id}")
 
             # Inject GitHub token for MCP GitHub server
             user = db.query(User).filter(User.id == user_id).first()

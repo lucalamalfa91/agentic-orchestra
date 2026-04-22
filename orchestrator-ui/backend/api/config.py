@@ -29,6 +29,7 @@ class AIProviderConfig(BaseModel):
     base_url: str
     api_key: str
     ai_provider: str = "openai"  # "openai" or "anthropic"
+    ai_model: str = ""           # model name, e.g. "claude-sonnet-4-6" or "gpt-4o"
 
 
 class AIProviderTest(BaseModel):
@@ -36,6 +37,7 @@ class AIProviderTest(BaseModel):
     base_url: str
     api_key: str
     ai_provider: str = "openai"  # "openai", "anthropic", or "custom"
+    ai_model: str = ""           # model to use in the test call
 
 
 @router.options("/ai-provider")
@@ -87,17 +89,20 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
             {"user_id": config_data.user_id}
         ).fetchone()
 
+        ai_model = config_data.ai_model or None
+
         if not existing:
             # Create new configuration
             print(f"[SAVE CONFIG] Creating NEW configuration for user {config_data.user_id}")
             result = db.execute(
-                text("""INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active)
-                        VALUES (:user_id, :base_url, :api_key, :provider, true)"""),
+                text("""INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, ai_model, is_active)
+                        VALUES (:user_id, :base_url, :api_key, :provider, :ai_model, true)"""),
                 {
                     "user_id": config_data.user_id,
                     "base_url": config_data.base_url,
                     "api_key": encrypted_key,
-                    "provider": config_data.ai_provider
+                    "provider": config_data.ai_provider,
+                    "ai_model": ai_model,
                 }
             )
             db.commit()
@@ -111,13 +116,15 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
                         SET ai_base_url = :base_url,
                             ai_api_key_encrypted = :api_key,
                             ai_provider = :provider,
+                            ai_model = :ai_model,
                             is_active = true
                         WHERE user_id = :user_id"""),
                 {
                     "base_url": config_data.base_url,
                     "api_key": encrypted_key,
                     "provider": config_data.ai_provider,
-                    "user_id": config_data.user_id
+                    "ai_model": ai_model,
+                    "user_id": config_data.user_id,
                 }
             )
             db.commit()
@@ -155,19 +162,20 @@ def get_ai_provider(user_id: int, db: Session = Depends(get_db)):
     # Use raw SQL to bypass SQLAlchemy metadata cache issue
     from sqlalchemy import text
     result = db.execute(
-        text("SELECT ai_base_url, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
+        text("SELECT ai_base_url, ai_provider, ai_model FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
         {"user_id": user_id}
     ).fetchone()
 
     if not result:
-        return {"base_url": None, "ai_provider": "openai", "configured": False}
+        return {"base_url": None, "ai_provider": "openai", "ai_model": None, "configured": False}
 
-    base_url, ai_provider = result
+    base_url, ai_provider, ai_model = result
 
     return {
         "base_url": base_url,
-        "ai_provider": ai_provider or "openai",  # Graceful fallback if NULL
-        "configured": True
+        "ai_provider": ai_provider or "openai",
+        "ai_model": ai_model or None,
+        "configured": True,
     }
 
 
@@ -189,27 +197,27 @@ def test_ai_provider(test_data: AIProviderTest):
 
     try:
         if test_data.ai_provider == "anthropic":
-            # Test Anthropic API
+            test_model = test_data.ai_model or "claude-haiku-4-5-20251001"
             headers = {
                 "x-api-key": test_data.api_key,
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01"
             }
             payload = {
-                "model": "claude-3-haiku-20240307",
+                "model": test_model,
                 "messages": [{"role": "user", "content": "test"}],
                 "max_tokens": 10
             }
             url = f"{test_data.base_url.rstrip('/')}/v1/messages"
 
         else:
-            # Test OpenAI or Custom (OpenAI-compatible)
+            test_model = test_data.ai_model or "gpt-4o-mini"
             headers = {
                 "Authorization": f"Bearer {test_data.api_key}",
                 "Content-Type": "application/json",
             }
             payload = {
-                "model": "gpt-3.5-turbo",
+                "model": test_model,
                 "messages": [{"role": "user", "content": "test"}],
                 "max_tokens": 10,
             }
@@ -273,7 +281,7 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
     # Note: NOT using ai_provider column due to SQLAlchemy cache issues - deduce from base_url instead
     from sqlalchemy import text
     result = db.execute(
-        text("SELECT id, user_id, ai_base_url, ai_api_key_encrypted FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
+        text("SELECT id, user_id, ai_base_url, ai_api_key_encrypted, ai_provider, ai_model FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
         {"user_id": user_id}
     ).fetchone()
 
@@ -284,15 +292,25 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
             "message": "No AI provider configured. Please save your settings first."
         }
 
-    config_id, user_id_db, base_url, api_key_encrypted = result
+    config_id, user_id_db, base_url, api_key_encrypted, ai_provider_db, ai_model_db = result
 
-    # Deduce provider from base_url
-    if "anthropic.com" in base_url.lower():
+    # Use stored provider, fall back to deduction from URL
+    if ai_provider_db:
+        ai_provider = ai_provider_db
+    elif "anthropic.com" in base_url.lower():
         ai_provider = "anthropic"
     elif "openai.com" in base_url.lower():
         ai_provider = "openai"
     else:
         ai_provider = "custom"
+
+    # Resolve the model to test with
+    if ai_model_db:
+        saved_model = ai_model_db
+    elif ai_provider == "anthropic":
+        saved_model = "claude-haiku-4-5-20251001"
+    else:
+        saved_model = "gpt-4o-mini"
 
     print(f"[TEST CURRENT] Found config: id={config_id}, provider={ai_provider} (deduced), base_url={base_url}")
 
@@ -314,33 +332,31 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
     # Test connection using the same logic as /ai-provider/test
     try:
         if ai_provider == "anthropic":
-            # Test Anthropic API
             headers = {
                 "x-api-key": api_key,
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01"
             }
             payload = {
-                "model": "claude-3-haiku-20240307",
+                "model": saved_model,
                 "messages": [{"role": "user", "content": "test"}],
                 "max_tokens": 10
             }
             url = f"{base_url.rstrip('/')}/v1/messages"
-            print(f"[TEST CURRENT] Anthropic test URL: {url}")
+            print(f"[TEST CURRENT] Anthropic test URL: {url}, model: {saved_model}")
 
         else:
-            # Test OpenAI or Custom (OpenAI-compatible)
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             }
             payload = {
-                "model": "gpt-3.5-turbo",
+                "model": saved_model,
                 "messages": [{"role": "user", "content": "test"}],
                 "max_tokens": 10,
             }
             url = f"{base_url.rstrip('/')}/chat/completions"
-            print(f"[TEST CURRENT] OpenAI/Custom test URL: {url}")
+            print(f"[TEST CURRENT] OpenAI/Custom test URL: {url}, model: {saved_model}")
 
         # Attempt to call the AI provider
         print(f"[TEST CURRENT] Sending request...")

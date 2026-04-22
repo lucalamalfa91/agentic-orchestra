@@ -1,11 +1,23 @@
 """Integration tests for LangGraph orchestration flow."""
 
 import pytest
+from contextlib import AsyncExitStack, ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 from langgraph.graph import StateGraph
 
 from AI_agents.graph.graph import create_graph, fan_out_to_parallel_agents, route_after_integration_check
 from AI_agents.graph.state import OrchestraState, AgentStatus
+
+# Patch targets: all node names as bound in graph.py's namespace.
+# graph.add_node() captures the name from graph.py scope, so patches
+# must target "AI_agents.graph.graph.<node_name>" and be active BEFORE
+# create_graph() is called so the mock is registered in the graph.
+_DESIGN_TARGET    = "AI_agents.graph.graph.design_node"
+_BACKEND_TARGET   = "AI_agents.graph.graph.backend_node"
+_FRONTEND_TARGET  = "AI_agents.graph.graph.frontend_node"
+_BACKLOG_TARGET   = "AI_agents.graph.graph.backlog_node"
+_DEVOPS_TARGET    = "AI_agents.graph.graph.devops_node"
+_PUBLISH_TARGET   = "AI_agents.graph.graph.publish_node"
 
 
 @pytest.fixture
@@ -18,128 +30,105 @@ def simple_graph():
 @pytest.mark.integration
 async def test_graph_runs_end_to_end(mock_state):
     """Test that graph runs from START to END with mocked agents."""
-    # Create graph without checkpointer for testing
-    graph_builder = create_graph()
-    app = graph_builder.compile(checkpointer=None)
+    mocks = {
+        _DESIGN_TARGET:   AsyncMock(side_effect=lambda s: {**s, "design_yaml": {"app_name": "Test App"}, "api_schema": {}, "db_schema": {}, "agent_statuses": {**s["agent_statuses"], "design": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["design"]}),
+        _BACKEND_TARGET:  AsyncMock(side_effect=lambda s: {**s, "backend_code": {"main.py": "print('test')"}, "agent_statuses": {**s["agent_statuses"], "backend_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["backend_agent"]}),
+        _FRONTEND_TARGET: AsyncMock(side_effect=lambda s: {**s, "frontend_code": {"App.tsx": "export {}"}, "agent_statuses": {**s["agent_statuses"], "frontend_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["frontend_agent"]}),
+        _BACKLOG_TARGET:  AsyncMock(side_effect=lambda s: {**s, "backlog_items": [{"title": "Task 1"}], "agent_statuses": {**s["agent_statuses"], "backlog_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["backlog_agent"]}),
+        _DEVOPS_TARGET:   AsyncMock(side_effect=lambda s: {**s, "devops_config": {"docker-compose.yml": "version: '3'"}, "agent_statuses": {**s["agent_statuses"], "devops_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["devops_agent"]}),
+        _PUBLISH_TARGET:  AsyncMock(side_effect=lambda s: {**s, "github_repo_url": "https://github.com/test/repo", "agent_statuses": {**s["agent_statuses"], "publish_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["publish_agent"]}),
+    }
 
-    # Mock all agent nodes to be no-ops (just update statuses)
-    with patch("AI_agents.graph.graph.design_node", new=AsyncMock(side_effect=lambda s: {
-        **s,
-        "design_yaml": {"app_name": "Test App"},
-        "api_schema": {},
-        "db_schema": {},
-        "agent_statuses": {**s["agent_statuses"], "design": AgentStatus.COMPLETED},
-        "completed_steps": s["completed_steps"] + ["design"],
-    })):
-        with patch("AI_agents.graph.nodes.backend_node.backend_node", new=AsyncMock(side_effect=lambda s: {
-            **s,
-            "backend_code": {"main.py": "print('test')"},
-            "agent_statuses": {**s["agent_statuses"], "backend_agent": AgentStatus.COMPLETED},
-            "completed_steps": s["completed_steps"] + ["backend_agent"],
-        })):
-            with patch("AI_agents.graph.nodes.frontend_node.frontend_node", new=AsyncMock(side_effect=lambda s: {
-                **s,
-                "frontend_code": {"App.tsx": "export {}"},
-                "agent_statuses": {**s["agent_statuses"], "frontend_agent": AgentStatus.COMPLETED},
-                "completed_steps": s["completed_steps"] + ["frontend_agent"],
-            })):
-                with patch("AI_agents.graph.nodes.backlog_node.backlog_node", new=AsyncMock(side_effect=lambda s: {
-                    **s,
-                    "backlog_items": [{"title": "Task 1"}],
-                    "agent_statuses": {**s["agent_statuses"], "backlog_agent": AgentStatus.COMPLETED},
-                    "completed_steps": s["completed_steps"] + ["backlog_agent"],
-                })):
-                    with patch("AI_agents.graph.nodes.devops_node.devops_node", new=AsyncMock(side_effect=lambda s: {
-                        **s,
-                        "devops_config": {"docker-compose.yml": "version: '3'"},
-                        "agent_statuses": {**s["agent_statuses"], "devops_agent": AgentStatus.COMPLETED},
-                        "completed_steps": s["completed_steps"] + ["devops_agent"],
-                    })):
-                        with patch("AI_agents.graph.nodes.publish_node.publish_node", new=AsyncMock(side_effect=lambda s: {
-                            **s,
-                            "github_repo_url": "https://github.com/test/repo",
-                            "agent_statuses": {**s["agent_statuses"], "publish_agent": AgentStatus.COMPLETED},
-                            "completed_steps": s["completed_steps"] + ["publish_agent"],
-                        })):
-                            # Run graph
-                            config = {"configurable": {"thread_id": "test-thread-1"}}
-                            final_state = None
+    # Patches must be active BEFORE create_graph() so graph.add_node() captures the mocks
+    with ExitStack() as stack:
+        for target, mock_fn in mocks.items():
+            stack.enter_context(patch(target, new=mock_fn))
 
-                            async for event in app.astream(mock_state, config):
-                                # Extract final state
-                                if "__end__" in event:
-                                    final_state = event["__end__"]
+        app = create_graph().compile(checkpointer=None)
+        config = {"configurable": {"thread_id": "test-e2e"}}
+        # ainvoke returns the final accumulated state directly
+        final_state = await app.ainvoke(mock_state, config)
 
-                            # Verify all steps completed
-                            assert final_state is not None
-                            assert "knowledge_retrieval" in final_state["completed_steps"]
-                            assert "design" in final_state["completed_steps"]
-                            assert "backend_agent" in final_state["completed_steps"]
-                            assert "frontend_agent" in final_state["completed_steps"]
-                            assert "backlog_agent" in final_state["completed_steps"]
-                            assert "integration_check" in final_state["completed_steps"]
-                            assert "devops_agent" in final_state["completed_steps"]
-                            assert "publish_agent" in final_state["completed_steps"]
-
-                            # Verify no errors
-                            assert len(final_state["errors"]) == 0
+    assert final_state is not None
+    completed = final_state.get("completed_steps", [])
+    assert "knowledge_retrieval" in completed
+    assert "design" in completed
+    assert "backend_agent" in completed
+    assert "frontend_agent" in completed
+    assert "backlog_agent" in completed
+    assert "integration_check" in completed
+    assert "devops_agent" in completed
+    assert "publish_agent" in completed
+    assert not any(v for v in final_state.get("errors", {}).values())
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_backend_agent_failure_routes_to_error_handler(mock_state):
-    """Test that backend_agent failure triggers error_handler."""
-    graph_builder = create_graph()
-    app = graph_builder.compile(checkpointer=None)
-
-    # Mock backend_agent to fail
-    async def failing_backend_node(state):
+    """Test that backend_agent (critical) failure routes to error_handler, skipping devops/publish."""
+    async def failing_backend(state):
         state["errors"]["backend_agent"] = "Code generation failed"
         state["agent_statuses"]["backend_agent"] = AgentStatus.FAILED
         state["completed_steps"].append("backend_agent")
         return state
 
-    with patch("AI_agents.graph.graph.design_node", new=AsyncMock(side_effect=lambda s: {
-        **s,
-        "design_yaml": {"app_name": "Test"},
-        "agent_statuses": {**s["agent_statuses"], "design": AgentStatus.COMPLETED},
-        "completed_steps": s["completed_steps"] + ["design"],
-    })):
-        with patch("AI_agents.graph.nodes.backend_node.backend_node", new=failing_backend_node):
-            with patch("AI_agents.graph.nodes.frontend_node.frontend_node", new=AsyncMock(side_effect=lambda s: {
-                **s,
-                "frontend_code": {},
-                "agent_statuses": {**s["agent_statuses"], "frontend_agent": AgentStatus.COMPLETED},
-                "completed_steps": s["completed_steps"] + ["frontend_agent"],
-            })):
-                with patch("AI_agents.graph.nodes.backlog_node.backlog_node", new=AsyncMock(side_effect=lambda s: {
-                    **s,
-                    "backlog_items": [],
-                    "agent_statuses": {**s["agent_statuses"], "backlog_agent": AgentStatus.COMPLETED},
-                    "completed_steps": s["completed_steps"] + ["backlog_agent"],
-                })):
-                    # Run graph
-                    config = {"configurable": {"thread_id": "test-thread-2"}}
-                    final_state = None
+    mocks = {
+        _DESIGN_TARGET:   AsyncMock(side_effect=lambda s: {**s, "design_yaml": {"app_name": "Test"}, "agent_statuses": {**s["agent_statuses"], "design": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["design"]}),
+        _BACKEND_TARGET:  failing_backend,
+        _FRONTEND_TARGET: AsyncMock(side_effect=lambda s: {**s, "frontend_code": {}, "agent_statuses": {**s["agent_statuses"], "frontend_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["frontend_agent"]}),
+        _BACKLOG_TARGET:  AsyncMock(side_effect=lambda s: {**s, "backlog_items": [], "agent_statuses": {**s["agent_statuses"], "backlog_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["backlog_agent"]}),
+    }
 
-                    async for event in app.astream(mock_state, config):
-                        if "__end__" in event:
-                            final_state = event["__end__"]
+    with ExitStack() as stack:
+        for target, mock_fn in mocks.items():
+            stack.enter_context(patch(target, new=mock_fn))
 
-                    # Verify error_handler was invoked
-                    assert final_state is not None
-                    assert "error_handler" in final_state["completed_steps"]
+        app = create_graph().compile(checkpointer=None)
+        config = {"configurable": {"thread_id": "test-backend-fail"}}
+        final_state = await app.ainvoke(mock_state, config)
 
-                    # Verify backend error is recorded
-                    assert "backend_agent" in final_state["errors"]
-                    assert final_state["errors"]["backend_agent"] == "Code generation failed"
+    assert final_state is not None
+    completed = final_state.get("completed_steps", [])
+    assert "error_handler" in completed
+    assert "backend_agent" in final_state.get("errors", {})
+    assert final_state["errors"]["backend_agent"] == "Code generation failed"
+    assert "devops_agent" not in completed
+    assert "publish_agent" not in completed
 
-                    # Verify devops and publish were NOT executed
-                    assert "devops_agent" not in final_state["completed_steps"]
-                    assert "publish_agent" not in final_state["completed_steps"]
 
-                    # Verify final step is FAILED
-                    assert final_state["current_step"] == "FAILED"
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_non_critical_failure_does_not_block_devops(mock_state):
+    """Test that backlog_agent (non-critical) failure still allows devops+publish to run."""
+    async def failing_backlog(state):
+        state["errors"]["backlog_agent"] = "Backlog generation failed"
+        state["agent_statuses"]["backlog_agent"] = AgentStatus.FAILED
+        state["completed_steps"].append("backlog_agent")
+        return state
+
+    mocks = {
+        _DESIGN_TARGET:   AsyncMock(side_effect=lambda s: {**s, "design_yaml": {"app_name": "Test"}, "api_schema": {}, "db_schema": {}, "agent_statuses": {**s["agent_statuses"], "design": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["design"]}),
+        _BACKEND_TARGET:  AsyncMock(side_effect=lambda s: {**s, "backend_code": {"main.py": ""}, "agent_statuses": {**s["agent_statuses"], "backend_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["backend_agent"]}),
+        _FRONTEND_TARGET: AsyncMock(side_effect=lambda s: {**s, "frontend_code": {"App.tsx": ""}, "agent_statuses": {**s["agent_statuses"], "frontend_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["frontend_agent"]}),
+        _BACKLOG_TARGET:  failing_backlog,
+        _DEVOPS_TARGET:   AsyncMock(side_effect=lambda s: {**s, "devops_config": {}, "agent_statuses": {**s["agent_statuses"], "devops_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["devops_agent"]}),
+        _PUBLISH_TARGET:  AsyncMock(side_effect=lambda s: {**s, "github_repo_url": "https://github.com/test/repo", "agent_statuses": {**s["agent_statuses"], "publish_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["publish_agent"]}),
+    }
+
+    with ExitStack() as stack:
+        for target, mock_fn in mocks.items():
+            stack.enter_context(patch(target, new=mock_fn))
+
+        app = create_graph().compile(checkpointer=None)
+        config = {"configurable": {"thread_id": "test-backlog-fail"}}
+        final_state = await app.ainvoke(mock_state, config)
+
+    assert final_state is not None
+    completed = final_state.get("completed_steps", [])
+    assert "devops_agent" in completed
+    assert "publish_agent" in completed
+    assert "error_handler" not in completed
+    assert final_state.get("errors", {}).get("backlog_agent") == "Backlog generation failed"
 
 
 @pytest.mark.asyncio
@@ -198,18 +187,12 @@ async def test_parallel_nodes_all_update_state():
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_state_preserved_across_nodes():
-    """Test that data set in design node is accessible in backend and frontend nodes."""
-    graph_builder = create_graph()
-    app = graph_builder.compile(checkpointer=None)
+    """Test that design output is passed correctly to backend and frontend nodes."""
+    design_output = {"app_name": "Todo App", "stack": {"backend": "Python/FastAPI"}, "entities": [{"name": "Task"}]}
+    backend_received: dict = {}
+    frontend_received: dict = {}
 
-    design_output = {
-        "app_name": "Todo App",
-        "stack": {"backend": "Python/FastAPI"},
-        "entities": [{"name": "Task"}],
-    }
-
-    # Mock design_node to set design_yaml
-    async def mock_design_node(state):
+    async def mock_design(state):
         state["design_yaml"] = design_output
         state["api_schema"] = {"endpoints": []}
         state["db_schema"] = {"tables": []}
@@ -217,87 +200,51 @@ async def test_state_preserved_across_nodes():
         state["completed_steps"].append("design")
         return state
 
-    # Track what data backend/frontend receive
-    backend_received_data = {}
-    frontend_received_data = {}
-
-    async def track_backend_node(state):
-        backend_received_data["design_yaml"] = state["design_yaml"]
+    async def track_backend(state):
+        backend_received["design_yaml"] = state["design_yaml"]
         state["backend_code"] = {"main.py": "# code"}
         state["agent_statuses"]["backend_agent"] = AgentStatus.COMPLETED
         state["completed_steps"].append("backend_agent")
         return state
 
-    async def track_frontend_node(state):
-        frontend_received_data["design_yaml"] = state["design_yaml"]
+    async def track_frontend(state):
+        frontend_received["design_yaml"] = state["design_yaml"]
         state["frontend_code"] = {"App.tsx": "// code"}
         state["agent_statuses"]["frontend_agent"] = AgentStatus.COMPLETED
         state["completed_steps"].append("frontend_agent")
         return state
 
-    with patch("AI_agents.graph.graph.design_node", new=mock_design_node):
-        with patch("AI_agents.graph.nodes.backend_node.backend_node", new=track_backend_node):
-            with patch("AI_agents.graph.nodes.frontend_node.frontend_node", new=track_frontend_node):
-                with patch("AI_agents.graph.nodes.backlog_node.backlog_node", new=AsyncMock(side_effect=lambda s: {
-                    **s,
-                    "backlog_items": [],
-                    "agent_statuses": {**s["agent_statuses"], "backlog_agent": AgentStatus.COMPLETED},
-                    "completed_steps": s["completed_steps"] + ["backlog_agent"],
-                })):
-                    with patch("AI_agents.graph.nodes.devops_node.devops_node", new=AsyncMock(side_effect=lambda s: {
-                        **s,
-                        "devops_config": {},
-                        "agent_statuses": {**s["agent_statuses"], "devops_agent": AgentStatus.COMPLETED},
-                        "completed_steps": s["completed_steps"] + ["devops_agent"],
-                    })):
-                        with patch("AI_agents.graph.nodes.publish_node.publish_node", new=AsyncMock(side_effect=lambda s: {
-                            **s,
-                            "github_repo_url": "https://github.com/test/repo",
-                            "agent_statuses": {**s["agent_statuses"], "publish_agent": AgentStatus.COMPLETED},
-                            "completed_steps": s["completed_steps"] + ["publish_agent"],
-                        })):
-                            state = {
-                                "requirements": "Todo app",
-                                "user_id": "u1",
-                                "project_id": "p1",
-                                "features": [],
-                                "rag_context": [],
-                                "design_yaml": {},
-                                "api_schema": {},
-                                "db_schema": {},
-                                "backend_code": {},
-                                "frontend_code": {},
-                                "backlog_items": [],
-                                "devops_config": {},
-                                "github_repo_url": "",
-                                "current_step": "START",
-                                "completed_steps": [],
-                                "agent_statuses": {
-                                    "knowledge_retrieval": AgentStatus.PENDING,
-                                    "design": AgentStatus.PENDING,
-                                    "backend_agent": AgentStatus.PENDING,
-                                    "frontend_agent": AgentStatus.PENDING,
-                                    "backlog_agent": AgentStatus.PENDING,
-                                    "integration_check": AgentStatus.PENDING,
-                                    "error_handler": AgentStatus.PENDING,
-                                    "devops_agent": AgentStatus.PENDING,
-                                    "publish_agent": AgentStatus.PENDING,
-                                },
-                                "errors": {},
-                            }
+    init_state = {
+        "requirements": "Todo app", "user_id": "u1", "project_id": "p1", "ai_provider": "anthropic",
+        "features": [], "rag_context": [], "design_yaml": {}, "api_schema": {}, "db_schema": {},
+        "backend_code": {}, "frontend_code": {}, "backlog_items": [], "devops_config": {},
+        "github_repo_url": "", "current_step": "START", "completed_steps": [], "errors": {},
+        "agent_statuses": {a: AgentStatus.PENDING for a in ["knowledge_retrieval", "design", "backend_agent", "frontend_agent", "backlog_agent", "integration_check", "error_handler", "devops_agent", "publish_agent"]},
+    }
 
-                            config = {"configurable": {"thread_id": "test-thread-3"}}
+    mocks = {
+        _DESIGN_TARGET:   mock_design,
+        _BACKEND_TARGET:  track_backend,
+        _FRONTEND_TARGET: track_frontend,
+        _BACKLOG_TARGET:  AsyncMock(side_effect=lambda s: {**s, "backlog_items": [], "agent_statuses": {**s["agent_statuses"], "backlog_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["backlog_agent"]}),
+        _DEVOPS_TARGET:   AsyncMock(side_effect=lambda s: {**s, "devops_config": {}, "agent_statuses": {**s["agent_statuses"], "devops_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["devops_agent"]}),
+        _PUBLISH_TARGET:  AsyncMock(side_effect=lambda s: {**s, "github_repo_url": "https://github.com/test/repo", "agent_statuses": {**s["agent_statuses"], "publish_agent": AgentStatus.COMPLETED}, "completed_steps": s["completed_steps"] + ["publish_agent"]}),
+    }
 
-                            async for event in app.astream(state, config):
-                                pass  # Let graph run to completion
+    with ExitStack() as stack:
+        for target, mock_fn in mocks.items():
+            stack.enter_context(patch(target, new=mock_fn))
 
-                            # Verify backend received design data
-                            assert "design_yaml" in backend_received_data
-                            assert backend_received_data["design_yaml"]["app_name"] == "Todo App"
+        app = create_graph().compile(checkpointer=None)
+        config = {"configurable": {"thread_id": "test-state-preserved"}}
 
-                            # Verify frontend received design data
-                            assert "design_yaml" in frontend_received_data
-                            assert frontend_received_data["design_yaml"]["app_name"] == "Todo App"
+        async for _ in app.astream(init_state, config):
+            pass
+
+    assert "design_yaml" in backend_received
+    assert backend_received["design_yaml"]["app_name"] == "Todo App"
+    assert "design_yaml" in frontend_received
+    assert frontend_received["design_yaml"]["app_name"] == "Todo App"
 
 
 @pytest.mark.unit

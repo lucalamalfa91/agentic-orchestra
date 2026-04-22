@@ -83,12 +83,13 @@ def get_llm_client(provider: str, config: Dict[str, Any] = None):
             )
 
         # Use appropriate default model based on provider
+        # Priority: config dict > OPENAI_MODEL env var > default
+        env_model = os.getenv("OPENAI_MODEL")
         if base_url and "adesso" in base_url.lower():
-            # ADESSO AI Hub uses different model names
-            model = config.get("model", "gpt-4o-mini")  # ADESSO default
+            model = config.get("model") or env_model or "gpt-4o-mini"
             logger.info(f"[llm_client] Creating ADESSO AI Hub client: {model}")
         else:
-            model = config.get("model", "gpt-4")
+            model = config.get("model") or env_model or "gpt-4o"
             logger.info(f"[llm_client] Creating OpenAI client: {model}")
 
         # Create client with optional base_url
