@@ -241,8 +241,8 @@ async def resume_generation(
                 user_id=project_user_id,  # FIX: Pass user_id for env var injection
                 existing_project_id=project_id
             )
-        except Exception as e:
-            print(f"[ERROR] Resume generation failed: {e}")
+        except BaseException as e:
+            print(f"[ERROR] Resume generation failed: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
         finally:

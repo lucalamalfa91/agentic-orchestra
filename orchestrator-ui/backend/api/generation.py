@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 try:
     from orchestrator_ui.backend import schemas
-    from orchestrator_ui.backend.database import get_db
+    from orchestrator_ui.backend.database import get_db, SessionLocal
     from orchestrator_ui.backend.orchestrator import GenerationOrchestrator, generate_id
     from orchestrator_ui.backend.models import User, Configuration
 except ModuleNotFoundError:
@@ -18,7 +18,7 @@ except ModuleNotFoundError:
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     import schemas
-    from database import get_db
+    from database import get_db, SessionLocal
     from orchestrator import GenerationOrchestrator, generate_id
     from models import User, Configuration
 
@@ -48,24 +48,25 @@ async def get_auth_user(authorization: str = Header(None)):
 async def run_generation_background(
     generation_id: str,
     request: schemas.GenerationRequest,
-    db: Session,
     user_id: int
 ):
     """
     Background task to run generation.
+    Creates its own DB session (request session is closed after response is sent).
     Waits 1.5s so the frontend WebSocket has time to connect.
     """
+    task_db = SessionLocal()
     try:
         await asyncio.sleep(1.5)
-        project_id = await orchestrator.run_generation(generation_id, request, db, user_id)
+        project_id = await orchestrator.run_generation(generation_id, request, task_db, user_id)
         if project_id:
             print(f"[OK] Generation completed! Project ID: {project_id}")
         else:
             print(f"[ERROR] Generation failed for {generation_id}")
-    except Exception as e:
-        print(f"[ERROR] Background task error: {e}")
+    except BaseException as e:
+        print(f"[ERROR] Background task error: {type(e).__name__}: {e}")
     finally:
-        db.close()
+        task_db.close()
 
 
 @router.post("/start", response_model=schemas.GenerationStartResponse)
@@ -112,7 +113,6 @@ async def start_generation(
         run_generation_background,
         generation_id,
         request,
-        db,
         user_id
     )
 

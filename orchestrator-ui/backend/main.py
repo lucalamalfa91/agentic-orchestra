@@ -1,6 +1,8 @@
 """
 FastAPI main application for Orchestrator UI.
 """
+import asyncio
+import json
 import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,15 +92,19 @@ def health_check():
 async def websocket_endpoint(websocket: WebSocket, generation_id: str):
     """
     WebSocket endpoint for real-time generation progress updates.
-    Args are passed positionally — generation_id first, websocket second,
-    matching ConnectionManager.connect(self, generation_id, websocket).
+    Sends a heartbeat every 30 s to keep the connection alive through
+    proxies/load-balancers that close idle connections with code 1006.
     """
     await manager.connect(generation_id, websocket)  # order matters!
     try:
         while True:
-            data = await websocket.receive_text()
-            if data == "ping":
-                await websocket.send_text("pong")
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30)
+                if data == "ping":
+                    await websocket.send_text("pong")
+            except asyncio.TimeoutError:
+                # No message from client in 30 s — send heartbeat to keep proxy alive
+                await websocket.send_text(json.dumps({"type": "heartbeat"}))
     except WebSocketDisconnect:
         manager.disconnect(generation_id, websocket)
     except Exception as e:
