@@ -27,6 +27,22 @@ except ModuleNotFoundError:
     manager = ws_module.manager
 
 
+def run_migrations():
+    """Run Alembic migrations to ensure DB schema is up to date."""
+    try:
+        from alembic.config import Config
+        from alembic import command
+
+        alembic_cfg_path = Path(__file__).parent / "alembic.ini"
+        alembic_cfg = Config(str(alembic_cfg_path))
+        # Override script_location to absolute path so it works regardless of cwd
+        alembic_cfg.set_main_option("script_location", str(Path(__file__).parent / "alembic"))
+        command.upgrade(alembic_cfg, "head")
+        print("Alembic migrations applied successfully")
+    except Exception as e:
+        print(f"[WARN] Alembic migration failed (non-fatal): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -34,6 +50,7 @@ async def lifespan(app: FastAPI):
     """
     print("Starting Orchestrator UI Backend...")
     ensure_encryption_key()
+    run_migrations()
     init_db()
     print("Database initialized")
     yield
