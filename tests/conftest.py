@@ -17,6 +17,7 @@ def mock_state() -> OrchestraState:
         "requirements": "Build a simple todo app",
         "user_id": "test-user-123",
         "project_id": "test-project-456",
+        "ai_provider": "anthropic",
         "features": ["task creation", "task completion"],
 
         # Agent data

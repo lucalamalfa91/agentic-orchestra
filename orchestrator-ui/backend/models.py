@@ -121,6 +121,7 @@ class Configuration(Base):
     ai_base_url = Column(String(500), nullable=False)
     ai_api_key_encrypted = Column(Text, nullable=False)
     ai_provider = Column(String(50), nullable=False, server_default="openai")  # "openai" or "anthropic"
+    ai_model = Column(String(100), nullable=True)   # e.g. "claude-sonnet-4-6", "gpt-4o"
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
