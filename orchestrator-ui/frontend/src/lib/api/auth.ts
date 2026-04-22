@@ -18,11 +18,17 @@ export async function getAIProviderConfig(userId: number) {
   return res.json();
 }
 
-export async function saveAIProvider(userId: number, baseUrl: string, apiKey: string, provider: 'openai' | 'anthropic' | 'custom' = 'openai') {
+export async function saveAIProvider(
+  userId: number,
+  baseUrl: string,
+  apiKey: string,
+  provider: 'openai' | 'anthropic' | 'custom' = 'openai',
+  aiModel: string = '',
+) {
   const res = await fetch(`${API}/config/ai-provider`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, base_url: baseUrl, api_key: apiKey, ai_provider: provider })
+    body: JSON.stringify({ user_id: userId, base_url: baseUrl, api_key: apiKey, ai_provider: provider, ai_model: aiModel }),
   });
 
   if (!res.ok) {
@@ -33,11 +39,16 @@ export async function saveAIProvider(userId: number, baseUrl: string, apiKey: st
   return res.json();
 }
 
-export async function testAIProvider(baseUrl: string, apiKey: string, provider: 'openai' | 'anthropic' | 'custom' = 'openai') {
+export async function testAIProvider(
+  baseUrl: string,
+  apiKey: string,
+  provider: 'openai' | 'anthropic' | 'custom' = 'openai',
+  aiModel: string = '',
+) {
   const res = await fetch(`${API}/config/ai-provider/test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, ai_provider: provider })
+    body: JSON.stringify({ base_url: baseUrl, api_key: apiKey, ai_provider: provider, ai_model: aiModel }),
   });
   return res.json();
 }

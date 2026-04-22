@@ -11,11 +11,30 @@ export default function AIProviderSetup() {
   const [provider, setProvider] = useState<'openai' | 'anthropic' | 'custom'>('anthropic');
   const [baseUrl, setBaseUrl] = useState('https://api.anthropic.com');
   const [apiKey, setApiKey] = useState('');
+  const [aiModel, setAiModel] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [hasExistingConfig, setHasExistingConfig] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+
+  const ANTHROPIC_MODELS = [
+    { value: 'claude-sonnet-4-6',          label: 'Claude Sonnet 4.6 (Recommended)' },
+    { value: 'claude-opus-4-7',            label: 'Claude Opus 4.7' },
+    { value: 'claude-haiku-4-5-20251001',  label: 'Claude Haiku 4.5 (Fast)' },
+    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+    { value: 'claude-3-5-haiku-20241022',  label: 'Claude 3.5 Haiku' },
+  ];
+
+  const OPENAI_MODELS = [
+    { value: 'gpt-4o',       label: 'GPT-4o (Recommended)' },
+    { value: 'gpt-4o-mini',  label: 'GPT-4o Mini (Fast)' },
+    { value: 'gpt-4-turbo',  label: 'GPT-4 Turbo' },
+    { value: 'o1',           label: 'o1' },
+    { value: 'o3-mini',      label: 'o3-mini' },
+  ];
+
+  const modelOptions = provider === 'anthropic' ? ANTHROPIC_MODELS : provider === 'openai' ? OPENAI_MODELS : [];
 
   // Load existing configuration on mount
   useEffect(() => {
@@ -41,6 +60,8 @@ export default function AIProviderSetup() {
         // Detect provider from base_url or use returned ai_provider
         const detectedProvider = config.ai_provider || detectProviderFromUrl(config.base_url);
         setProvider(detectedProvider as 'openai' | 'anthropic' | 'custom');
+
+        if (config.ai_model) setAiModel(config.ai_model);
 
         // Test existing configuration automatically
         setIsTestingConnection(true);
@@ -74,12 +95,12 @@ export default function AIProviderSetup() {
   // Update base URL when provider changes
   const handleProviderChange = (newProvider: 'openai' | 'anthropic' | 'custom') => {
     setProvider(newProvider);
+    setAiModel(''); // reset model when switching provider
     if (newProvider === 'anthropic') {
       setBaseUrl('https://api.anthropic.com');
     } else if (newProvider === 'openai') {
       setBaseUrl('https://api.openai.com/v1');
     } else {
-      // Custom - leave URL as is or clear it
       setBaseUrl('');
     }
   };
@@ -88,7 +109,7 @@ export default function AIProviderSetup() {
     setLoading(true);
     setMessage('');
     try {
-      const res = await testAIProvider(baseUrl, apiKey, provider);
+      const res = await testAIProvider(baseUrl, apiKey, provider, aiModel);
       setMessage(res.success ? res.message || '✓ Connection successful!' : `✗ ${res.message || 'Connection failed'}`);
     } catch (error) {
       setMessage(`✗ Error testing connection: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -111,8 +132,8 @@ export default function AIProviderSetup() {
     setMessage('');
 
     try {
-      console.log('Saving AI provider config:', { provider, baseUrl: baseUrl.substring(0, 30), hasKey: !!apiKey });
-      const result = await saveAIProvider(user.id, baseUrl, apiKey, provider);
+      console.log('Saving AI provider config:', { provider, baseUrl: baseUrl.substring(0, 30), hasKey: !!apiKey, aiModel });
+      const result = await saveAIProvider(user.id, baseUrl, apiKey, provider, aiModel);
       console.log('Save result:', result);
 
       setMessage('✓ Configuration saved successfully!');
@@ -359,6 +380,45 @@ export default function AIProviderSetup() {
               </Button>
             </div>
           </div>
+
+          {/* Model Selection (shown only for anthropic/openai) */}
+          {modelOptions.length > 0 && (
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                Model
+                <span className="ml-2 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+                  (optional — leave blank to use default)
+                </span>
+              </label>
+              <select
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                className="w-full focus-ring"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: aiModel ? 'var(--color-text)' : 'var(--color-text-tertiary)',
+                  padding: '0.75rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 'var(--font-size-base)',
+                  appearance: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="" style={{ background: '#1a1a2e', color: '#ccc' }}>
+                  — Use provider default —
+                </option>
+                {modelOptions.map((m) => (
+                  <option key={m.value} value={m.value} style={{ background: '#1a1a2e', color: '#fff' }}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Status Message */}
           {message && (
