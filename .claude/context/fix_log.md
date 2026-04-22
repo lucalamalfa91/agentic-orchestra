@@ -48,13 +48,44 @@ Il resume dovrebbe loggare l'attempt corretto.
 
 ---
 
+### FIX-02 — 2026-04-22 — WebSocket 1006 crash + resume silenzioso
+
+**Commit:** dc7aa9f (branch) + merge main 6e08a23
+**Branch:** `claude/fix-resume-notifications-fB0Xi` → mergiato in `main`
+
+#### Problemi risolti
+
+**A. Nessuna notifica durante generazione/resume**
+- `astream()` usava `stream_mode="values"` (default LangGraph 0.2+) che emette snapshot
+  completi dello stato invece di `{node_name: update}`. Di conseguenza nessun broadcast
+  per-step veniva inviato.
+- Fix: `stream_mode="updates"` in `orchestrator.py`.
+- Aggiunto broadcast `resume_info` quando artefatti salvati vengono caricati.
+
+**B. WebSocket 1006 (abnormal close) — tre cause**
+
+| Causa | File | Fix |
+|-------|------|-----|
+| DB session stale: session della request passata al background task, ma FastAPI la chiude al termine della response | `api/generation.py` | Creata `SessionLocal()` propria nel task |
+| Proxy idle timeout: design step con Sonnet dura 60-120 s; proxy chiude connessione inattiva con 1006 | `main.py` | Heartbeat server-side ogni 30 s |
+| `CancelledError` non catturata: `except Exception` non intercetta `BaseException` in Python ≥ 3.8 | `api/generation.py`, `api/projects.py` | Cambiato in `except BaseException` |
+
+**C. Modello haiku con limite 4096 token**
+- Default `claude-3-haiku-20240307` troppo limitato per codice completo → errore 400.
+- Fix: default → `claude-sonnet-4-6`; cap automatico in `llm_client.py` per vecchi modelli.
+
+#### File modificati
+`orchestrator.py`, `api/generation.py`, `api/projects.py`, `main.py`, `AI_agents/utils/llm_client.py`
+
+---
+
 ## Bug noti non ancora affrontati
 
 | ID | Descrizione | Priorità | Fix previsto |
 |----|-------------|----------|--------------|
-| BUG-B | JSON truncation/parse failure in backend_node e frontend_node per output troppo grandi | ALTA | FIX-02 |
-| BUG-G | Race condition WebSocket: messaggi early droppati perché WS non ancora connessa | MEDIA | FIX-03 o FIX-05 |
-| WS-1  | WebSocket problematico su Render free tier (proxy HTTP può killare la connessione) | MEDIA | FIX-05 (migrazione SSE) |
+| BUG-B | JSON truncation/parse failure in backend_node e frontend_node per output troppo grandi | ALTA | FIX-03 |
+| BUG-G | Race condition WebSocket: messaggi early droppati perché WS non ancora connessa | MEDIA | FIX-04 |
+| WS-1  | WebSocket problematico su Render free tier (proxy HTTP può killare la connessione) | BASSA (heartbeat aggiunto) | — |
 
 ---
 
