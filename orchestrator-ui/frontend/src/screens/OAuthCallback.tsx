@@ -19,7 +19,7 @@ export default function OAuthCallback() {
 
     async function handleCallback() {
       try {
-        const res = await fetch(`http://localhost:8000/api/auth/github/callback?code=${code}`);
+        const res = await fetch(`${(import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')}/api/auth/github/callback?code=${code}`);
         const data = await res.json();
 
         if (data.token) {

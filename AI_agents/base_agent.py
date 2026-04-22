@@ -44,8 +44,9 @@ Created: Prompt 07b (2026-04-09)
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableLambda
 from AI_agents.utils.llm_client import get_llm_client
 from AI_agents.graph.state import OrchestraState, AgentStatus
 import logging
@@ -60,7 +61,8 @@ class BaseAgent(ABC):
     """
 
     MAX_RETRIES: int = 2
-    agent_name: str = "base"  # override in subclass
+    agent_name: str = "base"   # override in subclass
+    output_field: str = ""     # OrchestraState key produced by this agent; used for resume skip
 
     def __init__(self):
         # LLM is lazy-initialized at invoke time so provider/key come from state
@@ -78,10 +80,20 @@ class BaseAgent(ABC):
             Runnable chain ready for .ainvoke()
         """
         llm = get_llm_client(provider, config)
-        return ChatPromptTemplate.from_messages([
-            ("system", self.system_prompt()),
-            ("human", "{input}")
-        ]) | llm | StrOutputParser()
+        # Unescape double braces from old template format ({{ → {, }} → })
+        system_prompt = self.system_prompt().replace("{{", "{").replace("}}", "}")
+
+        def build_messages(inputs):
+            return [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=inputs["input"]),
+            ]
+
+        return RunnableLambda(build_messages) | llm | StrOutputParser()
+
+    def get_llm_config(self) -> Dict[str, Any]:
+        """Return LLM config overrides. Override in subclass to set max_tokens, temperature, etc."""
+        return {}
 
     @abstractmethod
     def system_prompt(self) -> str:
@@ -153,6 +165,14 @@ class BaseAgent(ABC):
             Updated OrchestraState (COMPLETED or FAILED)
         """
         logger = logging.getLogger(self.agent_name)
+
+        # Skip if output already present (resume mode)
+        if self.output_field and state.get(self.output_field):
+            logger.info(f"[{self.agent_name}] output already present, skipping")
+            state["completed_steps"].append(self.agent_name)
+            state["agent_statuses"][self.agent_name] = AgentStatus.COMPLETED
+            return state
+
         logger.info(f"[{self.agent_name}] starting")
 
         # Mark agent as running
@@ -161,7 +181,7 @@ class BaseAgent(ABC):
 
         # Get AI provider config from state (injected by orchestrator)
         provider = state.get("ai_provider", "anthropic")
-        config: Dict[str, Any] = {}  # Extend if needed for model/temperature overrides
+        config: Dict[str, Any] = self.get_llm_config()
 
         # Build LCEL chain
         chain = self._build_chain(provider, config)

@@ -92,7 +92,7 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
             print(f"[SAVE CONFIG] Creating NEW configuration for user {config_data.user_id}")
             result = db.execute(
                 text("""INSERT INTO configurations (user_id, ai_base_url, ai_api_key_encrypted, ai_provider, is_active)
-                        VALUES (:user_id, :base_url, :api_key, :provider, 1)"""),
+                        VALUES (:user_id, :base_url, :api_key, :provider, true)"""),
                 {
                     "user_id": config_data.user_id,
                     "base_url": config_data.base_url,
@@ -111,7 +111,7 @@ def save_ai_provider(config_data: AIProviderConfig, db: Session = Depends(get_db
                         SET ai_base_url = :base_url,
                             ai_api_key_encrypted = :api_key,
                             ai_provider = :provider,
-                            is_active = 1
+                            is_active = true
                         WHERE user_id = :user_id"""),
                 {
                     "base_url": config_data.base_url,
@@ -155,7 +155,7 @@ def get_ai_provider(user_id: int, db: Session = Depends(get_db)):
     # Use raw SQL to bypass SQLAlchemy metadata cache issue
     from sqlalchemy import text
     result = db.execute(
-        text("SELECT ai_base_url, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = 1 LIMIT 1"),
+        text("SELECT ai_base_url, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
         {"user_id": user_id}
     ).fetchone()
 
@@ -273,7 +273,7 @@ def test_current_ai_provider(user_id: int, db: Session = Depends(get_db)):
     # Note: NOT using ai_provider column due to SQLAlchemy cache issues - deduce from base_url instead
     from sqlalchemy import text
     result = db.execute(
-        text("SELECT id, user_id, ai_base_url, ai_api_key_encrypted FROM configurations WHERE user_id = :user_id AND is_active = 1 LIMIT 1"),
+        text("SELECT id, user_id, ai_base_url, ai_api_key_encrypted FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
         {"user_id": user_id}
     ).fetchone()
 

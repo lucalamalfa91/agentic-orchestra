@@ -97,7 +97,7 @@ class GenerationOrchestrator:
             # Use raw SQL to bypass SQLAlchemy metadata cache issue
             from sqlalchemy import text
             config_result = db.execute(
-                text("SELECT ai_base_url, ai_api_key_encrypted, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = 1 LIMIT 1"),
+                text("SELECT ai_base_url, ai_api_key_encrypted, ai_provider FROM configurations WHERE user_id = :user_id AND is_active = true LIMIT 1"),
                 {"user_id": user_id}
             ).fetchone()
 
@@ -188,24 +188,27 @@ class GenerationOrchestrator:
 
         return ai_provider
 
+    # Maps LangGraph node names → OrchestraState fields to persist after completion
+    ARTIFACT_MAP = {
+        "design":         ["design_yaml", "api_schema", "db_schema"],
+        "backend_agent":  ["backend_code"],
+        "frontend_agent": ["frontend_code"],
+        "devops_agent":   ["devops_config"],
+        "backlog_agent":  ["backlog_items"],
+    }
+
     def _build_initial_state(
         self,
         request: schemas.GenerationRequest,
         project_id: str,
         user_id: int,
-        ai_provider: str
+        ai_provider: str,
+        saved_artifacts: dict = None,
     ) -> OrchestraState:
         """
         Build initial OrchestraState from user request.
-
-        Args:
-            request: Generation request from API
-            project_id: Unique project identifier
-            user_id: User ID
-            ai_provider: AI provider name configured by user
-
-        Returns:
-            Initial state dict for LangGraph execution
+        On resume, pre-populate state with saved artifact outputs so nodes
+        that already completed can skip their LLM calls.
         """
         requirements_text = self.generate_requirements_txt(request)
 
@@ -216,7 +219,7 @@ class GenerationOrchestrator:
             "user_id": str(user_id),
             "ai_provider": ai_provider,
 
-            # Agent-produced data (will be populated during execution)
+            # Agent-produced data — pre-loaded from DB when resuming
             "parsed_requirements": None,
             "design_yaml": None,
             "api_schema": None,
@@ -235,6 +238,13 @@ class GenerationOrchestrator:
             "agent_statuses": {},
             "errors": {},
         }
+
+        # Restore previously-generated outputs so nodes can skip them
+        if saved_artifacts:
+            for key, value in saved_artifacts.items():
+                if value is not None:
+                    state[key] = value  # type: ignore[literal-required]
+            logger.info(f"[orchestrator] Loaded saved artifacts: {list(saved_artifacts.keys())}")
 
         return state
 
@@ -286,6 +296,16 @@ class GenerationOrchestrator:
         self.pipeline_data_dir.mkdir(parents=True, exist_ok=True)
         self.requirements_file.write_text(content, encoding="utf-8")
         print(f"[OK] Written requirements to: {self.requirements_file}")
+
+    async def _close_websocket_gracefully(self, generation_id: str, code: int, reason: str):
+        """Close WebSocket connection gracefully."""
+        try:
+            await manager.broadcast(generation_id, {
+                "type": "error",
+                "message": reason,
+            })
+        except Exception:
+            pass
 
     async def broadcast_progress(self, generation_id, step, step_number, percentage, message):
         """Broadcast progress update via WebSocket."""
@@ -474,12 +494,26 @@ class GenerationOrchestrator:
                 await self.broadcast_progress(generation_id, "error", 0, 0, error_msg)
                 raise
 
-            # Build initial state
-            initial_state = self._build_initial_state(request, str(project.id), user_id or 1, ai_provider)
+            # Load saved artifacts for resume mode (empty dict for new generations)
+            saved_artifacts = {}
+            if existing_project_id:
+                # generation_attempt is already the NEW attempt (incremented before resume call),
+                # so artifacts from the previous run live under generation_attempt - 1.
+                saved_artifacts = crud.get_project_artifacts(
+                    db, existing_project_id, for_attempt=generation_attempt - 1
+                )
+                if saved_artifacts:
+                    logger.info(f"[orchestrator] Resume: found saved artifacts for {list(saved_artifacts.keys())}")
+                    await self.broadcast_progress(
+                        generation_id, "resume_info", 0, 5,
+                        f"Resuming: skipping {len(saved_artifacts)} already-completed step(s) "
+                        f"({', '.join(saved_artifacts.keys())})",
+                    )
 
-            # Load knowledge sources
-            # knowledge_sources = self._load_knowledge_sources(db, user_id or 1)
-            # TODO: Pass knowledge_sources to knowledge_retrieval node in Prompt 07
+            # Build initial state (pre-populated with saved artifacts on resume)
+            initial_state = self._build_initial_state(
+                request, str(project.id), user_id or 1, ai_provider, saved_artifacts
+            )
 
             # Stream LangGraph execution
             current_step = "start"
@@ -489,9 +523,27 @@ class GenerationOrchestrator:
 
             async for event in langgraph_app.astream(
                 initial_state,
-                config={"configurable": {"thread_id": generation_id}}
+                config={"configurable": {"thread_id": generation_id}},
+                stream_mode="updates",
             ):
                 print(f"[LangGraph Event] {event.keys()}")
+
+                # Persist artifacts to DB as each node completes
+                for node_name, node_data in event.items():
+                    if node_name in self.ARTIFACT_MAP and isinstance(node_data, dict):
+                        fields = {
+                            f: node_data[f]
+                            for f in self.ARTIFACT_MAP[node_name]
+                            if node_data.get(f) is not None
+                        }
+                        if fields:
+                            try:
+                                crud.upsert_project_artifacts(
+                                    db, project.id, generation_attempt, **fields
+                                )
+                                logger.info(f"[orchestrator] Saved artifacts for {node_name}: {list(fields.keys())}")
+                            except Exception as ae:
+                                logger.warning(f"[orchestrator] Failed to save artifacts for {node_name}: {ae}")
 
                 # Map event to step info
                 step_info = self._map_event_to_step_info(event)

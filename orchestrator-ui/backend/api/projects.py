@@ -1,12 +1,15 @@
 """
 Projects API endpoints.
 """
+import os
 from typing import List, Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import asyncio
+
+_WS_BASE_URL = os.getenv("WS_BASE_URL", "ws://localhost:8000")
 
 try:
     from orchestrator_ui.backend import crud, schemas
@@ -238,8 +241,8 @@ async def resume_generation(
                 user_id=project_user_id,  # FIX: Pass user_id for env var injection
                 existing_project_id=project_id
             )
-        except Exception as e:
-            print(f"[ERROR] Resume generation failed: {e}")
+        except BaseException as e:
+            print(f"[ERROR] Resume generation failed: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
         finally:
@@ -250,5 +253,5 @@ async def resume_generation(
     return schemas.GenerationStartResponse(
         generation_id=generation_id,
         message=f"Resuming generation for project {project.name} (attempt #{project.generation_attempt + 1})",
-        websocket_url=f"ws://localhost:8000/ws/generation/{generation_id}"
+        websocket_url=f"{_WS_BASE_URL}/ws/generation/{generation_id}"
     )

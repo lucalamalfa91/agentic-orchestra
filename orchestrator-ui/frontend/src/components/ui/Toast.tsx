@@ -15,12 +15,13 @@ const useToast = () => {
   return { toasts, showToast };
 };
 
-export function Toast({ message, type }: any) {
-  const bgColor = {
+export function Toast({ message, type }: { message: string; type: 'success' | 'error' | 'info' }) {
+  const bgColors: Record<'success' | 'error' | 'info', string> = {
     success: 'bg-green-500',
     error: 'bg-red-500',
     info: 'bg-blue-500'
-  }[type];
+  };
+  const bgColor = bgColors[type];
 
   return (
     <div className={`${bgColor} text-white px-4 py-2 rounded-lg shadow-lg`}>

@@ -352,6 +352,63 @@ def save_deploy_auth(user_id: int, provider: str, access_token: str, refresh_tok
         db.close()
 
 
+# ===== Project Artifacts CRUD =====
+
+def upsert_project_artifacts(
+    db: Session,
+    project_id: int,
+    generation_attempt: int,
+    **fields
+) -> None:
+    """
+    Create or update artifact fields for a given project/attempt.
+    Fields should be dicts/lists (will be JSON-serialised).
+    Only fields with non-None values are written.
+    """
+    row = db.query(models.ProjectArtifacts).filter_by(
+        project_id=project_id,
+        generation_attempt=generation_attempt
+    ).first()
+    if not row:
+        row = models.ProjectArtifacts(
+            project_id=project_id,
+            generation_attempt=generation_attempt
+        )
+        db.add(row)
+    for field, value in fields.items():
+        if value is not None and hasattr(row, field):
+            setattr(row, field, json.dumps(value))
+    db.commit()
+
+
+def get_project_artifacts(db: Session, project_id: int, for_attempt: Optional[int] = None) -> dict:
+    """
+    Load artifact outputs for a project.
+    Returns a dict of {field_name: parsed_value} for populated fields only.
+    Pass for_attempt to override the attempt number (e.g. generation_attempt - 1 on resume).
+    """
+    project = db.query(models.Project).filter_by(id=project_id).first()
+    if not project:
+        return {}
+    attempt = for_attempt if for_attempt is not None else project.generation_attempt
+    row = db.query(models.ProjectArtifacts).filter_by(
+        project_id=project_id,
+        generation_attempt=attempt
+    ).first()
+    if not row:
+        return {}
+    artifact_fields = [
+        "design_yaml", "api_schema", "db_schema",
+        "backend_code", "frontend_code", "devops_config", "backlog_items",
+    ]
+    result = {}
+    for field in artifact_fields:
+        raw = getattr(row, field, None)
+        if raw:
+            result[field] = json.loads(raw)
+    return result
+
+
 # ===== Knowledge Source CRUD =====
 
 def create_knowledge_source(

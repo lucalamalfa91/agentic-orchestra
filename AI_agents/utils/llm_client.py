@@ -139,10 +139,23 @@ def get_llm_client(provider: str, config: Dict[str, Any] = None):
         # Get model from config or env var, with fallback chain
         model = config.get("model") or os.getenv("ANTHROPIC_MODEL")
         if not model:
-            # Fallback to free tier model (works with most API keys)
-            model = "claude-3-haiku-20240307"
+            model = "claude-sonnet-4-6"
 
         logger.info(f"[llm_client] Creating Anthropic client: {model}")
+
+        # Enforce per-model output token limits for older models that cap at 4096.
+        # Newer models (claude-sonnet-4-6, claude-3-5-*) support 8K–64K and are uncapped.
+        _ANTHROPIC_MAX_OUTPUT = {
+            "claude-3-haiku-20240307": 4096,
+            "claude-3-opus-20240229": 4096,
+        }
+        model_limit = _ANTHROPIC_MAX_OUTPUT.get(model)
+        if model_limit and max_tokens > model_limit:
+            logger.warning(
+                f"[llm_client] max_tokens={max_tokens} exceeds limit for {model} "
+                f"({model_limit}), capping to {model_limit}"
+            )
+            max_tokens = model_limit
 
         # Create client with optional base_url
         kwargs = {

@@ -47,6 +47,10 @@ class BackendAgent(BaseAgent):
     """
 
     agent_name = "backend_agent"
+    output_field = "backend_code"
+
+    def get_llm_config(self) -> dict:
+        return {"max_tokens": 8000}
 
     def system_prompt(self) -> str:
         return """You are an expert polyglot backend architect with deep knowledge of modern web frameworks across all major programming languages.

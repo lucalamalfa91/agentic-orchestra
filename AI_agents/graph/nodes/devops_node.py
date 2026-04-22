@@ -15,7 +15,34 @@ Created: Prompt 07e (2026-04-10)
 from AI_agents.base_agent import BaseAgent
 from AI_agents.graph.state import OrchestraState
 import json
+from json_repair import repair_json
 import logging
+
+
+def _escape_control_chars_in_json(text: str) -> str:
+    """Escape literal newlines/tabs inside JSON string values (LLM embeds raw YAML)."""
+    result = []
+    in_string = False
+    escaped = False
+    for ch in text:
+        if escaped:
+            result.append(ch)
+            escaped = False
+        elif ch == '\\':
+            result.append(ch)
+            escaped = True
+        elif ch == '"':
+            in_string = not in_string
+            result.append(ch)
+        elif in_string and ch == '\n':
+            result.append('\\n')
+        elif in_string and ch == '\r':
+            result.append('\\r')
+        elif in_string and ch == '\t':
+            result.append('\\t')
+        else:
+            result.append(ch)
+    return ''.join(result)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +74,10 @@ class DevopsAgent(BaseAgent):
     """
 
     agent_name = "devops_agent"
+    output_field = "devops_config"
+
+    def get_llm_config(self) -> dict:
+        return {"max_tokens": 6000}
 
     def system_prompt(self) -> str:
         return """You are an expert DevOps engineer and infrastructure architect with deep knowledge of CI/CD, containerization, and cloud deployment.
@@ -304,8 +335,21 @@ No markdown, no explanations.
                 if start_idx is not None and end_idx is not None:
                     cleaned = "\n".join(lines[start_idx:end_idx+1])
 
-            # Parse JSON
-            parsed = json.loads(cleaned)
+            # Escape literal control chars (newlines inside YAML embedded in JSON strings)
+            cleaned = _escape_control_chars_in_json(cleaned)
+
+            # Parse JSON (with repair fallback for any remaining issues)
+            try:
+                parsed = json.loads(cleaned)
+            except json.JSONDecodeError as json_err:
+                logger.warning(f"[devops_agent] JSON parse failed, attempting repair: {json_err}")
+                try:
+                    repaired = repair_json(cleaned)
+                    parsed = json.loads(repaired)
+                    logger.info("[devops_agent] JSON repaired successfully")
+                except Exception as repair_err:
+                    logger.error(f"[devops_agent] JSON repair also failed: {repair_err}")
+                    raise json_err
 
             # Validate structure
             if "files" not in parsed:
