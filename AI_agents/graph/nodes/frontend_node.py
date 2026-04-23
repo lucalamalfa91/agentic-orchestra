@@ -47,6 +47,9 @@ class FrontendAgent(BaseAgent):
     agent_name = "frontend_agent"
     output_field = "frontend_code"
 
+    def get_llm_config(self) -> dict:
+        return {"max_tokens": 8000}
+
     def system_prompt(self) -> str:
         return """You are an expert polyglot frontend architect with deep knowledge of modern web frameworks and UI development.
 
@@ -149,6 +152,13 @@ OUTPUT RULES:
 - Escape special characters in JSON (quotes, newlines, backslashes)
 - Use the EXACT framework specified - do not substitute or change it
 
+SCOPE CONSTRAINT (MANDATORY):
+- Generate ONLY 6–8 files maximum. Quality over quantity.
+- Prioritize: entry point (index.html/main.tsx), root component (App.tsx/App.vue), one main page component, API client file, package.json, config file.
+- Each file: max 150 lines. Keep code focused and correct.
+- Do NOT generate a separate component for every entity — one main component is enough for an MVP.
+- A working app with 7 focused files is better than an incomplete app with 20 truncated files.
+
 IMPORTANT: Read the user prompt carefully to understand which framework to use. Generate code ONLY in that framework.
 """
 
@@ -217,9 +227,11 @@ Generate code following {frontend_framework} conventions and best practices.
 - Accessible (WCAG 2.1 AA compliant)
 
 ## Instructions
-Generate the complete frontend codebase in {frontend_framework} following the requirements in your system prompt.
+Generate the frontend codebase in {frontend_framework} following the requirements in your system prompt.
 Use the appropriate project structure, component patterns, and tooling for {frontend_framework}.
 If TypeScript is specified in the framework name, use TypeScript. Otherwise, use JavaScript unless the framework requires TypeScript (like Angular).
+IMPORTANT: Generate exactly 6–8 files. One main App component, one page/view component, one API client, package.json, config, index.html.
+Each file must be complete and correct (max 150 lines each).
 Output ONLY the JSON structure with all file paths and code content. No markdown, no explanations.
 """
 

@@ -134,6 +134,13 @@ OUTPUT RULES:
 - Escape special characters in JSON (quotes, newlines, backslashes)
 - Use the EXACT framework specified - do not substitute or change it
 
+SCOPE CONSTRAINT (MANDATORY):
+- Generate ONLY 6–8 files maximum. Quality over quantity.
+- Prioritize: entry point, models, one routes/controllers file, database config, requirements/package file.
+- Each file: max 150 lines. Keep code focused and correct.
+- Do NOT generate separate files for every entity — consolidate models into one file.
+- A working app with 7 focused files is better than an incomplete app with 20 truncated files.
+
 IMPORTANT: Read the user prompt carefully to understand which framework to use. Generate code ONLY in that framework.
 """
 
@@ -215,8 +222,10 @@ Generate code following {backend_framework} conventions and best practices.
 {context_section}
 
 ## Instructions
-Generate the complete backend codebase in {backend_framework} following the requirements in your system prompt.
+Generate the backend codebase in {backend_framework} following the requirements in your system prompt.
 Use the appropriate project structure, naming conventions, and patterns for {backend_framework}.
+IMPORTANT: Generate exactly 6–8 files. Consolidate models in one file, routes in one file.
+Each file must be complete and correct (max 150 lines each).
 Output ONLY the JSON structure with all file paths and code content. No markdown, no explanations.
 """
 

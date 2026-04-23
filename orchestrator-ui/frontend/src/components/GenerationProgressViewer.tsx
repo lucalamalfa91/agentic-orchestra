@@ -2,7 +2,7 @@
  * Component to view generation progress in real-time.
  * No WebSocket here — progress state is passed in as props from useGeneration.
  */
-import React from 'react';
+import React, { useState } from 'react';
 
 interface Step {
   name: string;
@@ -22,6 +22,8 @@ interface GenerationProgressViewerProps {
   isConnected: boolean;
   /** Error string if WS or generation failed */
   error: string | null;
+  /** Log lines accumulated per step number (1-6) */
+  stepLogs?: Record<number, string[]>;
   onClose: () => void;
 }
 
@@ -41,8 +43,19 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
   message,
   isConnected,
   error,
+  stepLogs = {},
   onClose,
 }) => {
+  // Track which steps have their log section expanded (running step auto-expands)
+  const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({});
+
+  const toggleStep = (stepNumber: number) => {
+    setExpandedSteps(prev => ({ ...prev, [stepNumber]: !prev[stepNumber] }));
+  };
+
+  const isExpanded = (stepNumber: number, status: string) =>
+    status === 'running' ? (expandedSteps[stepNumber] ?? true) : (expandedSteps[stepNumber] ?? false);
+
   // Derive per-step status from currentStep + percentage
   const steps: Step[] = STEP_NAMES.map((name, i) => {
     const stepNumber = i + 1;
@@ -147,44 +160,96 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
 
         {/* Steps */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {steps.map((step, index) => (
-            <div
-              key={index}
-              style={{
-                padding: '1rem',
-                background: 'rgba(40, 30, 65, 0.5)',
-                border: `1px solid ${
-                  step.status === 'running'   ? 'rgba(102, 126, 234, 0.6)' :
-                  step.status === 'completed' ? 'rgba(16, 185, 129, 0.4)' :
-                                               'rgba(102, 126, 234, 0.2)'
-                }`,
-                borderRadius: '8px',
-                transition: 'all 0.3s',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                <span style={{
-                  color: getStatusColor(step.status),
-                  fontSize: '0.875rem', fontWeight: 'bold',
-                  minWidth: '30px', padding: '0.25rem 0.5rem',
-                  background: 'rgba(102, 126, 234, 0.2)', borderRadius: '4px',
-                }}>
-                  {getStatusIcon(step.status)}
-                </span>
-                <span style={{ color: '#ffffff', fontSize: '1rem', fontWeight: '500', flex: 1 }}>
-                  {step.name}
-                </span>
-                <span style={{ color: getStatusColor(step.status), fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
-                  {step.status}
-                </span>
+          {steps.map((step, index) => {
+            const stepNumber = index + 1;
+            const logs = stepLogs[stepNumber] ?? [];
+            const expanded = isExpanded(stepNumber, step.status);
+            return (
+              <div
+                key={index}
+                style={{
+                  padding: '1rem',
+                  background: 'rgba(40, 30, 65, 0.5)',
+                  border: `1px solid ${
+                    step.status === 'running'   ? 'rgba(102, 126, 234, 0.6)' :
+                    step.status === 'completed' ? 'rgba(16, 185, 129, 0.4)' :
+                                                 'rgba(102, 126, 234, 0.2)'
+                  }`,
+                  borderRadius: '8px',
+                  transition: 'all 0.3s',
+                }}
+              >
+                {/* Step header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{
+                    color: getStatusColor(step.status),
+                    fontSize: '0.875rem', fontWeight: 'bold',
+                    minWidth: '30px', padding: '0.25rem 0.5rem',
+                    background: 'rgba(102, 126, 234, 0.2)', borderRadius: '4px',
+                  }}>
+                    {getStatusIcon(step.status)}
+                  </span>
+                  <span style={{ color: '#ffffff', fontSize: '1rem', fontWeight: '500', flex: 1 }}>
+                    {step.name}
+                  </span>
+                  <span style={{ color: getStatusColor(step.status), fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
+                    {step.status}
+                  </span>
+                  {/* Log toggle button */}
+                  {logs.length > 0 && (
+                    <button
+                      onClick={() => toggleStep(stepNumber)}
+                      style={{
+                        background: 'rgba(102, 126, 234, 0.15)',
+                        border: '1px solid rgba(102, 126, 234, 0.3)',
+                        borderRadius: '4px',
+                        color: '#a5b4fc',
+                        fontSize: '0.7rem',
+                        padding: '0.2rem 0.5rem',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {expanded ? '▲' : '▼'} Logs ({logs.length})
+                    </button>
+                  )}
+                </div>
+
+                {/* Expandable log section */}
+                {expanded && logs.length > 0 && (
+                  <div style={{
+                    marginTop: '0.75rem',
+                    marginLeft: '2.5rem',
+                    padding: '0.5rem 0.75rem',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '6px',
+                    borderLeft: '2px solid rgba(102, 126, 234, 0.4)',
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                  }}>
+                    {logs.map((line, i) => (
+                      <div key={i} style={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.72rem',
+                        color: '#94a3b8',
+                        lineHeight: '1.6',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                      }}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {step.message && !expanded && (
+                  <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.5rem 0 0 2.5rem', fontStyle: 'italic' }}>
+                    {step.message}
+                  </p>
+                )}
               </div>
-              {step.message && (
-                <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.5rem 0 0 2.5rem', fontStyle: 'italic' }}>
-                  {step.message}
-                </p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {error && (

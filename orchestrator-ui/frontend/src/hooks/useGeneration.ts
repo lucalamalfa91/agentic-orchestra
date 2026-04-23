@@ -21,6 +21,7 @@ interface GenerationState {
   percentage: number;
   message: string;
   error: string | null;
+  stepLogs: Record<number, string[]>;
 }
 
 export function useGeneration() {
@@ -35,6 +36,7 @@ export function useGeneration() {
     percentage: 0,
     message: '',
     error: null,
+    stepLogs: {},
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -52,6 +54,7 @@ export function useGeneration() {
       currentStep: 0,
       percentage: 0,
       message: '',
+      stepLogs: {},
     }));
 
     try {
@@ -95,12 +98,43 @@ export function useGeneration() {
           const msg = JSON.parse(event.data);
           console.log('[WS] message:', msg);
 
-          setState(prev => ({
-            ...prev,
-            currentStep: msg.step_number ?? msg.step ?? prev.currentStep,
-            percentage: msg.percentage ?? prev.percentage,
-            message: msg.message ?? prev.message,
-          }));
+          // Accumulate log entries per step (from log_entry broadcasts)
+          if (msg.type === 'log_entry' && typeof msg.step_number === 'number' && msg.text) {
+            setState(prev => {
+              const existing = prev.stepLogs[msg.step_number] ?? [];
+              return {
+                ...prev,
+                stepLogs: {
+                  ...prev.stepLogs,
+                  [msg.step_number]: [...existing, msg.text as string],
+                },
+              };
+            });
+            return;
+          }
+
+          // Skip heartbeat messages silently
+          if (msg.type === 'heartbeat') return;
+
+          // Progress message: update step/percentage/message + append to step log
+          setState(prev => {
+            const stepNum: number = typeof msg.step_number === 'number'
+              ? msg.step_number
+              : prev.currentStep;
+            const newLogs = (msg.message && stepNum > 0)
+              ? {
+                  ...prev.stepLogs,
+                  [stepNum]: [...(prev.stepLogs[stepNum] ?? []), msg.message as string],
+                }
+              : prev.stepLogs;
+            return {
+              ...prev,
+              currentStep: msg.step_number ?? prev.currentStep,
+              percentage: msg.percentage ?? prev.percentage,
+              message: msg.message ?? prev.message,
+              stepLogs: newLogs,
+            };
+          });
 
           // Design confirmation screen
           if (msg.step_number === 2 && msg.status === 'completed') {

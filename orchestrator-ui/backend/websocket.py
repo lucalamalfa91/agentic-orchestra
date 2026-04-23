@@ -3,6 +3,7 @@ WebSocket connection manager for real-time generation progress.
 """
 import json
 import asyncio
+from datetime import datetime, timezone
 from typing import Dict, List
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -64,6 +65,15 @@ class ConnectionManager:
 
         for ws in dead:
             self.disconnect(generation_id, ws)
+
+    async def broadcast_log(self, generation_id: str, step_number: int, text: str):
+        """Broadcast a log_entry message for the expandable per-step log in the UI."""
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        await self.broadcast(generation_id, {
+            "type": "log_entry",
+            "step_number": step_number,
+            "text": f"{ts}  {text}",
+        })
 
     async def send_error(self, generation_id: str, error_message: str):
         print(f"[WS] ERROR      generation_id={generation_id} "

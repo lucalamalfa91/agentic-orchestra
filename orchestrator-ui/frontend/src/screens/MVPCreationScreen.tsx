@@ -16,6 +16,7 @@ export default function MVPCreationScreen() {
     message,
     wsConnected,
     error: genError,
+    stepLogs,
   } = useGeneration();
 
   const [prompt, setPrompt] = useState('');
@@ -66,6 +67,7 @@ export default function MVPCreationScreen() {
           message={message}
           isConnected={wsConnected}
           error={genError}
+          stepLogs={stepLogs}
           onClose={() => setShowViewer(false)}
         />
       )}
