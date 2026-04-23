@@ -46,14 +46,14 @@ class GenerationOrchestrator:
     """
 
     # Map agent node names to step information (preserves legacy format)
+    # human_approval_gate is NOT here — it's an interrupt point, not a progress step
     AGENT_TO_STEP = {
-        "knowledge_retrieval":  {"step": "readme",   "step_number": 1, "percentage": 16},
-        "design":               {"step": "design",   "step_number": 2, "percentage": 33},
-        "human_approval_gate":  {"step": "approved", "step_number": 3, "percentage": 40},
-        "backend_agent":        {"step": "backend",  "step_number": 4, "percentage": 55},
-        "frontend_agent":       {"step": "frontend", "step_number": 5, "percentage": 70},
-        "devops_agent":         {"step": "devops",   "step_number": 6, "percentage": 85},
-        "publish_agent":        {"step": "publish",  "step_number": 7, "percentage": 100},
+        "knowledge_retrieval":  {"step": "readme",   "step_number": 1, "percentage": 15},
+        "design":               {"step": "design",   "step_number": 2, "percentage": 30},
+        "backend_agent":        {"step": "backend",  "step_number": 3, "percentage": 50},
+        "frontend_agent":       {"step": "frontend", "step_number": 4, "percentage": 65},
+        "devops_agent":         {"step": "devops",   "step_number": 5, "percentage": 80},
+        "publish_agent":        {"step": "publish",  "step_number": 6, "percentage": 100},
     }
 
     def __init__(self, project_root: Path = None):
@@ -794,7 +794,7 @@ class GenerationOrchestrator:
         lg_config = {"configurable": {"thread_id": generation_id}}
 
         await self.broadcast_progress(
-            generation_id, "approved", 3, 40,
+            generation_id, "approved", 2, 35,
             "Design approved — starting code generation..."
         )
         crud.create_generation_log(
