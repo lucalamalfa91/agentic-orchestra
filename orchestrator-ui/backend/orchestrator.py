@@ -250,6 +250,9 @@ class GenerationOrchestrator:
             "completed_steps": [],
             "agent_statuses": {},
             "errors": {},
+
+            # Publish output
+            "github_repo_url": None,
         }
 
         # Restore previously-generated outputs so nodes can skip them
@@ -571,6 +574,7 @@ class GenerationOrchestrator:
             # Stream LangGraph execution
             current_step = "start"
             final_state = None
+            repo_url: Optional[str] = None
             lg_config = {"configurable": {"thread_id": generation_id}}
 
             # Resolve async-compiled app with checkpointer
@@ -604,6 +608,10 @@ class GenerationOrchestrator:
 
                     # Always track the latest node output as final_state candidate
                     final_state = node_data
+
+                    # Track GitHub URL when publish agent completes
+                    if node_name == "publish_agent":
+                        repo_url = node_data.get("github_repo_url") or repo_url
 
                     # Persist artifacts to DB as each node completes
                     if node_name in self.ARTIFACT_MAP:
@@ -706,7 +714,7 @@ class GenerationOrchestrator:
                     return None
 
             # Success!
-            crud.update_project_status(db, project.id, "completed")
+            crud.update_project_status(db, project.id, "completed", github_repo_url=repo_url or None)
             await self.broadcast_progress(
                 generation_id, "complete", 8, 100,
                 "App generation completed successfully!"
@@ -798,6 +806,7 @@ class GenerationOrchestrator:
 
         current_step = "approved"
         final_state = None
+        repo_url: Optional[str] = None
 
         async for event in langgraph_app.astream(
             None,  # None = resume from checkpoint
@@ -810,6 +819,8 @@ class GenerationOrchestrator:
                 if not isinstance(node_data, dict):
                     continue
                 final_state = node_data
+                if node_name == "publish_agent":
+                    repo_url = node_data.get("github_repo_url") or repo_url
                 if node_name in self.ARTIFACT_MAP:
                     fields = {
                         f: node_data[f]
@@ -863,7 +874,7 @@ class GenerationOrchestrator:
                 )
                 return None
 
-        crud.update_project_status(db, project_id, "completed")
+        crud.update_project_status(db, project_id, "completed", github_repo_url=repo_url or None)
         await self.broadcast_progress(
             generation_id, "complete", 8, 100,
             "App generation completed successfully!"

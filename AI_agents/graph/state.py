@@ -138,3 +138,7 @@ class OrchestraState(TypedDict):
     # Agents set errors[agent_name] and return state instead of raising
     # Annotated to merge error dicts from parallel agents (handles None)
     errors: Annotated[dict[str, str], lambda x, y: {**(x or {}), **(y or {})}]
+
+    # Producer: Publish Agent → Consumer: Orchestrator (saved to DB on success)
+    # Annotated to handle parallel agents returning full state
+    github_repo_url: Annotated[str | None, lambda x, y: x or y]
