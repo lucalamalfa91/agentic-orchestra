@@ -115,9 +115,6 @@ def fan_out_to_parallel_agents(state: OrchestraState):
 # Conditional routing
 # ============================================================================
 
-CRITICAL_AGENTS = {"design", "backend_agent", "frontend_agent"}
-
-
 def route_after_integration_check(
     state: OrchestraState,
 ) -> Literal["error_handler", "devops_agent"]:
