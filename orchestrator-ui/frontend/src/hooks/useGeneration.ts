@@ -8,7 +8,12 @@ import { useGenerationContext } from '../context/GenerationContext';
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const WS_BASE  = API_BASE.replace(/^http/, 'ws');
 
-type Screen = 'creation' | 'progress' | 'confirmation' | 'deploy' | 'success';
+type Screen = 'creation' | 'progress' | 'confirmation' | 'approval' | 'deploy' | 'success';
+
+interface ApprovalData {
+  design: any;
+  projectId: number | null;
+}
 
 interface GenerationState {
   currentScreen: Screen;
@@ -22,6 +27,7 @@ interface GenerationState {
   message: string;
   error: string | null;
   stepLogs: Record<number, string[]>;
+  pendingApproval: ApprovalData | null;
 }
 
 export function useGeneration() {
@@ -37,6 +43,7 @@ export function useGeneration() {
     message: '',
     error: null,
     stepLogs: {},
+    pendingApproval: null,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -97,6 +104,19 @@ export function useGeneration() {
         try {
           const msg = JSON.parse(event.data);
           console.log('[WS] message:', msg);
+
+          // Human-in-the-loop: design ready, waiting for user approval
+          if (msg.type === 'approval_required') {
+            setState(prev => ({
+              ...prev,
+              currentScreen: 'approval',
+              pendingApproval: {
+                design: msg.design ?? null,
+                projectId: msg.project_id ?? null,
+              },
+            }));
+            return;
+          }
 
           // Accumulate log entries per step (from log_entry broadcasts)
           if (msg.type === 'log_entry' && typeof msg.step_number === 'number' && msg.text) {
@@ -233,9 +253,32 @@ export function useGeneration() {
     setState(prev => ({ ...prev, currentScreen: 'progress' }));
   }, []);
 
+  const approve = useCallback(async () => {
+    const { generationId } = state;
+    if (!generationId) return;
+    setState(prev => ({
+      ...prev,
+      currentScreen: 'progress',
+      pendingApproval: null,
+    }));
+    try {
+      const res = await fetch(`${API_BASE}/api/generation/${generationId}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('jwt_token')}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setState(prev => ({ ...prev, error: err.detail || 'Approval failed' }));
+      }
+    } catch (err: any) {
+      setState(prev => ({ ...prev, error: err.message || 'Approval request failed' }));
+    }
+  }, [state.generationId]);
+
   return {
     ...state,
     startGeneration,
     confirmGeneration,
+    approve,
   };
 }

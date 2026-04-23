@@ -13,8 +13,13 @@ Modified: 2026-04-10 - Made framework-agnostic
 """
 
 from AI_agents.base_agent import BaseAgent
-from AI_agents.graph.state import OrchestraState
+from AI_agents.graph.state import OrchestraState, AgentStatus
+from AI_agents.utils.llm_client import get_llm_client
+from langchain_core.messages import HumanMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableLambda
 import json
+import time
 from json_repair import repair_json
 import logging
 
@@ -49,6 +54,115 @@ class FrontendAgent(BaseAgent):
 
     def get_llm_config(self) -> dict:
         return {"max_tokens": 8000}
+
+    # ------------------------------------------------------------------
+    # Per-file generation: overrides BaseAgent.run()
+    # ------------------------------------------------------------------
+
+    async def run(self, state: OrchestraState) -> OrchestraState:  # type: ignore[override]
+        """Two-phase per-file generation (same pattern as BackendAgent)."""
+        if self.output_field and state.get(self.output_field):
+            logger.info("[frontend_agent] output already present, skipping")
+            state["completed_steps"].append(self.agent_name)
+            state["agent_statuses"][self.agent_name] = AgentStatus.COMPLETED
+            return state
+
+        state["current_step"] = self.agent_name
+        state["agent_statuses"][self.agent_name] = AgentStatus.RUNNING
+
+        provider = state.get("ai_provider", "anthropic")
+        llm = get_llm_client(provider, {"max_tokens": 2000})
+
+        design = state.get("design_yaml") or {}
+        stack = design.get("stack", {})
+        framework = stack.get("frontend_framework", "React")
+        app_name = design.get("app_name", "app")
+        description = design.get("description", "")
+        api_endpoints = state.get("api_schema", [])
+
+        # ── Phase 1: file plan ────────────────────────────────────────
+        plan_prompt = f"""You are a {framework} architect.
+List the files needed for a minimal working frontend for: {app_name} — {description}
+Framework: {framework}
+API endpoints: {len(api_endpoints)} REST endpoints
+
+Return ONLY a JSON array of objects with keys "path" and "purpose". Max 8 files.
+Example: [{{"path":"frontend/src/App.tsx","purpose":"root component"}},...]"""
+
+        try:
+            plan_raw = await (
+                RunnableLambda(lambda _: [HumanMessage(content=plan_prompt)])
+                | llm | StrOutputParser()
+            ).ainvoke({})
+            cleaned = plan_raw.strip()
+            if cleaned.startswith("```"):
+                lines = cleaned.split("\n")
+                cleaned = "\n".join(l for l in lines if not l.startswith("```"))
+            try:
+                file_plan = json.loads(cleaned)
+            except json.JSONDecodeError:
+                file_plan = json.loads(repair_json(cleaned))
+            if not isinstance(file_plan, list):
+                file_plan = file_plan.get("files", [])
+        except Exception as e:
+            logger.error("[frontend_agent] file plan failed: %s", e)
+            state["errors"][self.agent_name] = f"File plan failed: {e}"
+            state["agent_statuses"][self.agent_name] = AgentStatus.FAILED
+            return state
+
+        logger.info("[frontend_agent] file plan: %s", [f.get("path") for f in file_plan])
+
+        # ── Phase 2: generate each file ──────────────────────────────
+        llm_file = get_llm_client(provider, {"max_tokens": 4000})
+        frontend_code: dict = {}
+
+        api_summary = "\n".join(
+            f"  {ep.get('method','GET')} {ep.get('path','/')}: {ep.get('description','')}"
+            for ep in api_endpoints
+        )
+
+        for file_info in file_plan:
+            file_path = file_info.get("path", "")
+            purpose = file_info.get("purpose", "")
+            if not file_path:
+                continue
+
+            file_prompt = f"""Generate the file `{file_path}` for a {framework} frontend.
+App: {app_name} — {description}
+
+Purpose of this file: {purpose}
+
+Available API endpoints:
+{api_summary or '  (standard CRUD)'}
+
+Rules:
+- Output ONLY the raw source code for this file (no JSON wrapping, no markdown fences).
+- Max 150 lines. Complete and syntactically correct.
+- Include all necessary imports."""
+
+            for attempt in range(3):
+                try:
+                    t0 = time.monotonic()
+                    code = await (
+                        RunnableLambda(lambda _: [HumanMessage(content=file_prompt)])
+                        | llm_file | StrOutputParser()
+                    ).ainvoke({})
+                    logger.info("[frontend_agent] %s generated in %.1fs", file_path, time.monotonic() - t0)
+                    if code.startswith("```"):
+                        lines = code.split("\n")
+                        code = "\n".join(l for l in lines if not l.startswith("```"))
+                    frontend_code[file_path] = code.strip()
+                    break
+                except Exception as e:
+                    logger.warning("[frontend_agent] file %s attempt %d failed: %s", file_path, attempt + 1, e)
+                    if attempt == 2:
+                        frontend_code[file_path] = f"// Generation failed: {e}"
+
+        state["frontend_code"] = frontend_code
+        state["completed_steps"].append(self.agent_name)
+        state["agent_statuses"][self.agent_name] = AgentStatus.COMPLETED
+        logger.info("[frontend_agent] completed — %d files", len(frontend_code))
+        return state
 
     def system_prompt(self) -> str:
         return """You are an expert polyglot frontend architect with deep knowledge of modern web frameworks and UI development.

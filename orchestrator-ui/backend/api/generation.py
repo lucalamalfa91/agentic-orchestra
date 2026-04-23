@@ -169,6 +169,51 @@ def cancel_generation_by_project(
     return _cancel_project_by_id(project_id, db)
 
 
+async def run_resume_background(generation_id: str, project_id: int, user_id: int):
+    """Background task to resume a generation paused at human_approval_gate."""
+    task_db = SessionLocal()
+    try:
+        await asyncio.sleep(0.5)
+        result = await orchestrator.resume_generation(generation_id, task_db, project_id, user_id)
+        if result:
+            print(f"[OK] Resume completed! Project ID: {result}")
+        else:
+            print(f"[ERROR] Resume failed for {generation_id}")
+    except BaseException as e:
+        print(f"[ERROR] Resume background error: {type(e).__name__}: {e}")
+    finally:
+        task_db.close()
+
+
+@router.post("/{generation_id}/approve")
+async def approve_generation(
+    generation_id: str,
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(get_auth_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Resume a generation paused at the human_approval_gate interrupt.
+    The frontend calls this when the user clicks "Approve" after reviewing the design.
+    """
+    from sqlalchemy import text
+    row = db.execute(
+        text("""
+            SELECT id FROM projects
+            WHERE status = 'in_progress' AND user_id = :uid
+            ORDER BY created_at DESC LIMIT 1
+        """),
+        {"uid": user_id},
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="No in-progress project found")
+
+    project_id = row[0]
+    background_tasks.add_task(run_resume_background, generation_id, project_id, user_id)
+    return {"status": "resuming", "generation_id": generation_id, "project_id": project_id}
+
+
 @router.post("/{generation_id}/cancel")
 def cancel_generation(generation_id: str, db: Session = Depends(get_db)):
     """

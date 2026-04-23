@@ -4,6 +4,7 @@ Replaces run_all_agents.py with declarative graph-based flow.
 
 Graph structure:
 START → knowledge_retrieval → design → INTERRUPT (human approval)
+  → human_approval_gate
   → [backend, frontend, backlog in parallel]
   → integration_check → conditional(errors? error_handler : devops_agent)
   → publish_agent → END
@@ -15,7 +16,6 @@ from typing import Literal, Optional
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from .state import OrchestraState, AgentStatus
 from .nodes.design_node import design_node
@@ -27,53 +27,53 @@ from .nodes.devops_node import devops_node
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# Agents that are critical — their failure aborts the pipeline.
+# Used by both graph routing AND orchestrator final-state check.
+# ============================================================================
+CRITICAL_AGENTS = frozenset({"design", "backend_agent", "frontend_agent"})
+
 # Get DATABASE_URL from environment (same as main backend)
 try:
     from orchestrator_ui.backend.database import DATABASE_URL
 except ModuleNotFoundError:
-    # Fallback for standalone execution
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///database/orchestrator.db")
 
 
 # ============================================================================
 # Agent nodes
 # ============================================================================
-# Real implementations:
-#   - design_node (Prompt 07a + 07c): Uses Deep Agents with planning
-#   - publish_node (Prompt 07c): Uses Deep Agents with filesystem + GitHub tools
-#   - backend_node (Prompt 07d): Uses BaseAgent for backend generation (language-agnostic)
-#   - frontend_node (Prompt 07d): Uses BaseAgent for frontend generation (framework-agnostic)
-#   - backlog_node (Prompt 07d): Uses BaseAgent for product backlog generation
-#   - devops_node (Prompt 07e): Uses BaseAgent for CI/CD and Docker configuration
-# Stubs remaining:
-#   - knowledge_retrieval, integration_check
 
 async def knowledge_retrieval(state: OrchestraState) -> OrchestraState:
     """Retrieve relevant documentation/examples from knowledge base (RAG)."""
     logger.info("[knowledge_retrieval] running...")
-
     state["current_step"] = "knowledge_retrieval"
     state["completed_steps"].append("knowledge_retrieval")
     state["agent_statuses"]["knowledge_retrieval"] = AgentStatus.COMPLETED
-
-    # Stub: in Prompt 04 this will populate state["retrieved_docs"]
     logger.info("[knowledge_retrieval] completed (stub)")
     return state
 
 
-# backend_agent, frontend_agent, backlog_agent now use real implementations
-# Defined in AI_agents/graph/nodes/ (Prompt 07d)
+async def human_approval_gate(state: OrchestraState) -> OrchestraState:
+    """
+    Pass-through node placed after design and before code generation.
+    The graph is compiled with interrupt_before=["human_approval_gate"],
+    so execution pauses here until the orchestrator resumes it after
+    the user approves the design in the frontend.
+    """
+    logger.info("[human_approval_gate] resumed after human approval")
+    state["current_step"] = "human_approval_gate"
+    state["completed_steps"].append("human_approval_gate")
+    state["agent_statuses"]["human_approval_gate"] = AgentStatus.COMPLETED
+    return state
 
 
 async def integration_check(state: OrchestraState) -> OrchestraState:
     """Verify that backend, frontend, and backlog are consistent."""
     logger.info("[integration_check] running...")
-
     state["current_step"] = "integration_check"
     state["completed_steps"].append("integration_check")
     state["agent_statuses"]["integration_check"] = AgentStatus.COMPLETED
-
-    # Stub: in Prompt 07 this will validate consistency across artifacts
     logger.info("[integration_check] completed (stub)")
     return state
 
@@ -81,26 +81,14 @@ async def integration_check(state: OrchestraState) -> OrchestraState:
 async def error_handler(state: OrchestraState) -> OrchestraState:
     """Handle errors from any agent - log details and mark as FAILED."""
     logger.error("[error_handler] running - agent failures detected")
-
-    # Log all errors from state["errors"]
     for agent_name, error_msg in state["errors"].items():
         if error_msg:
-            # Use % formatting to avoid f-string issues with braces in error_msg
             logger.error("  - %s: %s", agent_name, error_msg)
-
     state["current_step"] = "FAILED"
     state["completed_steps"].append("error_handler")
     state["agent_statuses"]["error_handler"] = AgentStatus.COMPLETED
-
     logger.error("[error_handler] pipeline marked as FAILED")
     return state
-
-
-# devops_agent now uses real implementation from devops_node (Prompt 07e)
-# Defined in AI_agents/graph/nodes/devops_node.py
-
-# publish_agent now uses real implementation from publish_node (Prompt 07c)
-# Defined in AI_agents/graph/nodes/publish_node.py
 
 
 # ============================================================================
@@ -109,18 +97,13 @@ async def error_handler(state: OrchestraState) -> OrchestraState:
 
 def fan_out_to_parallel_agents(state: OrchestraState):
     """
-    After design completes, send state to backend, frontend, and backlog
+    After human approval, send state to backend, frontend, and backlog
     agents in parallel using LangGraph Send API.
-
-    If design failed, route to error_handler instead.
     """
-    # Check if design agent failed
     if state.get("errors", {}).get("design"):
         logger.error("[fan_out] Design agent failed - routing to error_handler")
         return [Send("error_handler", state)]
-
-    # Design succeeded - proceed with parallel agents
-    logger.info("[fan_out] Design succeeded - routing to parallel agents")
+    logger.info("[fan_out] Routing to parallel code-generation agents")
     return [
         Send("backend_agent", state),
         Send("frontend_agent", state),
@@ -165,22 +148,12 @@ def route_after_integration_check(
 # ============================================================================
 
 def create_graph() -> StateGraph:
-    """
-    Build and return the LangGraph StateGraph for orchestration.
-
-    Graph flow:
-      START → knowledge_retrieval → design
-        → [backend_agent, frontend_agent, backlog_agent] (parallel)
-        → integration_check
-        → conditional:
-            - if errors → error_handler → END
-            - else → devops_agent → publish_agent → END
-    """
+    """Build and return the LangGraph StateGraph for orchestration."""
     graph = StateGraph(OrchestraState)
 
-    # Add all nodes
     graph.add_node("knowledge_retrieval", knowledge_retrieval)
     graph.add_node("design", design_node)
+    graph.add_node("human_approval_gate", human_approval_gate)
     graph.add_node("backend_agent", backend_node)
     graph.add_node("frontend_agent", frontend_node)
     graph.add_node("backlog_agent", backlog_node)
@@ -189,34 +162,27 @@ def create_graph() -> StateGraph:
     graph.add_node("devops_agent", devops_node)
     graph.add_node("publish_agent", publish_node)
 
-    # Sequential: START → knowledge_retrieval → design
     graph.add_edge(START, "knowledge_retrieval")
     graph.add_edge("knowledge_retrieval", "design")
-
-    # Parallel fan-out: design → [backend, frontend, backlog] OR error_handler
-    # The fan_out function checks if design failed and routes accordingly
+    # Design → human_approval_gate (graph pauses here via interrupt_before)
+    graph.add_edge("design", "human_approval_gate")
+    # After approval → parallel code generation
     graph.add_conditional_edges(
-        "design",
+        "human_approval_gate",
         fan_out_to_parallel_agents,
         ["backend_agent", "frontend_agent", "backlog_agent", "error_handler"]
     )
 
-    # Fan-in: all 3 agents → integration_check
     graph.add_edge("backend_agent", "integration_check")
     graph.add_edge("frontend_agent", "integration_check")
     graph.add_edge("backlog_agent", "integration_check")
 
-    # Conditional routing after integration_check
     graph.add_conditional_edges(
         "integration_check",
         route_after_integration_check,
-        {
-            "error_handler": "error_handler",
-            "devops_agent": "devops_agent",
-        }
+        {"error_handler": "error_handler", "devops_agent": "devops_agent"},
     )
 
-    # Final steps
     graph.add_edge("error_handler", END)
     graph.add_edge("devops_agent", "publish_agent")
     graph.add_edge("publish_agent", END)
@@ -225,74 +191,58 @@ def create_graph() -> StateGraph:
 
 
 # ============================================================================
-# Graph compilation with checkpointer (Prompt 08)
+# Graph compilation with checkpointer
 # ============================================================================
 
-# Lazy compilation - checkpointer initialized on first use
-_app: Optional[StateGraph] = None
-_checkpointer: Optional[AsyncPostgresSaver] = None
+_app: Optional[object] = None
+_checkpointer = None
 
 
 async def get_app():
     """
-    Get compiled LangGraph app with PostgreSQL checkpointer.
+    Get compiled LangGraph app with checkpointer (lazy initialization).
 
-    Initializes checkpointer on first call (lazy initialization).
-    The checkpointer enables:
-    - State persistence across sessions
-    - Human-in-the-loop approval after design phase
-    - Resume from checkpoints after interrupts
-
-    Returns:
-        Compiled LangGraph application
+    Uses PostgreSQL when DATABASE_URL points to postgres, falls back to
+    in-memory MemorySaver for SQLite/dev environments.
     """
     global _app, _checkpointer
 
     if _app is None:
-        logger.info("Initializing LangGraph app with PostgreSQL checkpointer...")
+        logger.info("Initializing LangGraph app with checkpointer...")
 
-        # Create checkpointer from DATABASE_URL
-        _checkpointer = AsyncPostgresSaver.from_conn_string(DATABASE_URL)
+        if DATABASE_URL.startswith("postgresql") or DATABASE_URL.startswith("postgres"):
+            try:
+                from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+                _checkpointer = AsyncPostgresSaver.from_conn_string(DATABASE_URL)
+                await _checkpointer.setup()
+                logger.info("PostgreSQL checkpointer initialized")
+            except Exception as e:
+                logger.warning("PostgreSQL checkpointer failed (%s), falling back to MemorySaver", e)
+                from langgraph.checkpoint.memory import MemorySaver
+                _checkpointer = MemorySaver()
+        else:
+            logger.info("Non-postgres DATABASE_URL — using MemorySaver checkpointer")
+            from langgraph.checkpoint.memory import MemorySaver
+            _checkpointer = MemorySaver()
 
-        # Setup checkpoint tables in database
-        await _checkpointer.setup()
-        logger.info("PostgreSQL checkpointer initialized successfully")
-
-        # Build and compile graph
         graph_builder = create_graph()
-        _app = graph_builder.compile(checkpointer=_checkpointer)
-        logger.info("LangGraph app compiled with PostgreSQL checkpointer")
+        _app = graph_builder.compile(
+            checkpointer=_checkpointer,
+            interrupt_before=["human_approval_gate"],
+        )
+        logger.info("LangGraph app compiled with interrupt_before=['human_approval_gate']")
 
     return _app
 
 
-# For backward compatibility (synchronous access)
-# WARNING: This creates the graph at import time. Use get_app() for async initialization.
-# Lazy initialization to avoid executing agent code during import
-_legacy_app = None
-
-def _get_legacy_app():
-    """Lazy getter for backward compatibility."""
-    global _legacy_app
-    if _legacy_app is None:
-        graph_builder = create_graph()
-        _legacy_app = graph_builder.compile(checkpointer=None)
-    return _legacy_app
-
-# Property-like access for backward compatibility
+# Backward-compatible synchronous proxy (no checkpointer, no interrupt)
 class _AppProxy:
-    """Proxy object that lazily initializes the app when accessed."""
     def __getattr__(self, name):
-        return getattr(_get_legacy_app(), name)
+        import asyncio
+        graph_builder = create_graph()
+        compiled = graph_builder.compile(checkpointer=None)
+        return getattr(compiled, name)
 
-    def __call__(self, *args, **kwargs):
-        return _get_legacy_app()(*args, **kwargs)
+app = _AppProxy()
 
-app = _AppProxy()  # Lazy initialization - graph compiled on first access
-
-
-# ============================================================================
-# Exports
-# ============================================================================
-
-__all__ = ["app", "get_app", "create_graph"]
+__all__ = ["app", "get_app", "create_graph", "CRITICAL_AGENTS"]
