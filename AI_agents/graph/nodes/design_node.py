@@ -26,6 +26,7 @@ import logging
 import json
 import re
 from deepagents import create_deep_agent
+from json_repair import repair_json
 from AI_agents.utils.llm_client import get_llm_client
 from AI_agents.graph.state import OrchestraState, AgentStatus
 from AI_agents.graph.utils import escape_braces
@@ -177,7 +178,16 @@ Return ONLY the JSON object, optionally wrapped in ```json markdown fences.
             json_str = raw.strip()
 
         logger.info(f"[design_node] JSON string to parse: {json_str[:500]}...")
-        parsed = json.loads(json_str)
+        try:
+            parsed = json.loads(json_str)
+        except json.JSONDecodeError as _first_err:
+            logger.warning(f"[design_node] JSON parse failed, attempting repair: {_first_err}")
+            try:
+                repaired = repair_json(json_str)
+                parsed = json.loads(repaired)
+                logger.info("[design_node] JSON repaired successfully")
+            except Exception:
+                raise _first_err
         logger.info(f"[design_node] ✓ Successfully parsed JSON with keys: {list(parsed.keys())}")
 
         app_name = parsed.get('app_name', 'unknown')

@@ -329,6 +329,35 @@ class GenerationOrchestrator:
             "message": message,
         })
 
+    def _summarize_node_output(self, node_name: str, node_data: dict) -> str:
+        """Return a one-line human-readable summary of a completed node's output."""
+        if not isinstance(node_data, dict):
+            return "Completed"
+        errors = node_data.get("errors") or {}
+        if errors.get(node_name):
+            return f"Failed: {str(errors[node_name])[:120]}"
+        if node_name == "design":
+            design = node_data.get("design_yaml") or {}
+            app_name = design.get("app_name", "")
+            entities = len(design.get("entities", []))
+            endpoints = len(node_data.get("api_schema") or [])
+            return f"Design complete: {app_name} — {entities} entities, {endpoints} endpoints"
+        if node_name == "backend_agent":
+            files = node_data.get("backend_code") or {}
+            names = ", ".join(list(files.keys())[:4])
+            return f"Generated {len(files)} backend file(s): {names}"
+        if node_name == "frontend_agent":
+            files = node_data.get("frontend_code") or {}
+            names = ", ".join(list(files.keys())[:4])
+            return f"Generated {len(files)} frontend file(s): {names}"
+        if node_name == "devops_agent":
+            files = node_data.get("devops_config") or {}
+            return f"Generated {len(files)} devops file(s)"
+        if node_name == "publish_agent":
+            url = node_data.get("github_repo_url", "")
+            return f"Published: {url}" if url else "Published to GitHub"
+        return "Completed"
+
     def _map_event_to_step_info(self, event: dict) -> Optional[dict]:
         """
         Map LangGraph event to step info for WebSocket broadcast.
@@ -542,6 +571,19 @@ class GenerationOrchestrator:
             current_step = "start"
             final_state = None
 
+            # Pre-populate the expandable log section with queued/skipped status per step
+            for node_name, step_info in self.AGENT_TO_STEP.items():
+                artifact_fields = self.ARTIFACT_MAP.get(node_name, [])
+                if saved_artifacts and any(f in saved_artifacts for f in artifact_fields):
+                    await manager.broadcast_log(
+                        generation_id, step_info["step_number"],
+                        "Skipping — completed in a previous attempt"
+                    )
+                else:
+                    await manager.broadcast_log(
+                        generation_id, step_info["step_number"], "Queued"
+                    )
+
             print(f"[OK] Starting LangGraph execution for project {project.id}")
 
             async for event in langgraph_app.astream(
@@ -592,6 +634,13 @@ class GenerationOrchestrator:
                         step_info["percentage"],
                         f"{current_step.capitalize()} generation completed",
                     )
+                    # Send summary to the expandable log section
+                    for node_name, node_data in event.items():
+                        if node_name in self.AGENT_TO_STEP and isinstance(node_data, dict):
+                            summary = self._summarize_node_output(node_name, node_data)
+                            await manager.broadcast_log(
+                                generation_id, step_info["step_number"], summary
+                            )
 
             print(f"[OK] LangGraph execution completed for project {project.id}")
 
