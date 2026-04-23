@@ -10,6 +10,20 @@ interface Step {
   message: string;
 }
 
+interface DesignSummary {
+  project_name?: string;
+  app_name?: string;
+  tech_stack?: {
+    frontend?: string;
+    backend?: string;
+    database?: string;
+    deploy_platform?: string;
+  };
+  entities?: Array<{ name: string; description?: string } | string>;
+  api_endpoints?: Array<{ path?: string; method?: string; description?: string } | string>;
+  [key: string]: unknown;
+}
+
 interface GenerationProgressViewerProps {
   generationId: string;
   /** Overall progress percentage (0-100) */
@@ -24,6 +38,10 @@ interface GenerationProgressViewerProps {
   error: string | null;
   /** Log lines accumulated per step number (1-6) */
   stepLogs?: Record<number, string[]>;
+  /** Set when the graph is paused waiting for human approval */
+  pendingApproval?: { design: DesignSummary | null; projectId: number | null } | null;
+  /** Called when the user clicks Approve */
+  onApprove?: () => void;
   onClose: () => void;
 }
 
@@ -44,6 +62,8 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
   isConnected,
   error,
   stepLogs = {},
+  pendingApproval,
+  onApprove,
   onClose,
 }) => {
   // Track which steps have their log section expanded (running step auto-expands)
@@ -109,6 +129,118 @@ const GenerationProgressViewer: React.FC<GenerationProgressViewerProps> = ({
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Human-in-the-loop approval overlay */}
+        {pendingApproval && (
+          <div style={{
+            marginBottom: '2rem',
+            padding: '1.5rem',
+            background: 'rgba(102, 126, 234, 0.08)',
+            border: '1px solid rgba(102, 126, 234, 0.5)',
+            borderRadius: '10px',
+          }}>
+            <h3 style={{ color: '#a5b4fc', fontSize: '1.1rem', fontWeight: 700, margin: '0 0 1rem 0' }}>
+              Design Ready — Approve to Generate Code
+            </h3>
+
+            {pendingApproval.design && (() => {
+              const d = pendingApproval.design as DesignSummary;
+              const name = d.project_name ?? d.app_name;
+              const stack = d.tech_stack;
+              const entities = d.entities ?? [];
+              const endpoints = d.api_endpoints ?? [];
+              return (
+                <>
+                  {name && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <span style={{ color: '#9ca3af', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>App</span>
+                      <div style={{ color: '#ffffff', fontWeight: 600, marginTop: '0.25rem' }}>{name}</div>
+                    </div>
+                  )}
+
+                  {stack && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <span style={{ color: '#9ca3af', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tech Stack</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.25rem' }}>
+                        {Object.entries(stack).filter(([, v]) => v).map(([k, v]) => (
+                          <span key={k} style={{
+                            background: 'rgba(102, 126, 234, 0.2)',
+                            border: '1px solid rgba(102, 126, 234, 0.3)',
+                            borderRadius: '4px',
+                            color: '#c4b5fd',
+                            fontSize: '0.75rem',
+                            padding: '0.15rem 0.5rem',
+                          }}>
+                            {k}: {String(v)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {entities.length > 0 && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <span style={{ color: '#9ca3af', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Entities ({entities.length})
+                      </span>
+                      <div style={{ marginTop: '0.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                        {entities.slice(0, 8).map((e, i) => (
+                          <span key={i} style={{
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            borderRadius: '4px',
+                            color: '#6ee7b7',
+                            fontSize: '0.75rem',
+                            padding: '0.15rem 0.5rem',
+                          }}>
+                            {typeof e === 'string' ? e : e.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {endpoints.length > 0 && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <span style={{ color: '#9ca3af', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        API Endpoints ({endpoints.length})
+                      </span>
+                      <div style={{ marginTop: '0.25rem', fontFamily: 'monospace', fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.8 }}>
+                        {endpoints.slice(0, 6).map((ep, i) => (
+                          <div key={i}>
+                            {typeof ep === 'string' ? ep : `${ep.method ?? 'GET'} ${ep.path ?? ''}`}
+                          </div>
+                        ))}
+                        {endpoints.length > 6 && <div style={{ color: '#6b7280' }}>+ {endpoints.length - 6} more</div>}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            <button
+              onClick={onApprove}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                background: 'linear-gradient(90deg, #667eea, #764ba2)',
+                border: 'none',
+                borderRadius: '8px',
+                color: '#ffffff',
+                fontSize: '0.95rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)',
+                transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+            >
+              Approve and Generate Code
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div style={{ marginBottom: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

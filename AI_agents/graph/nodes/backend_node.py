@@ -13,8 +13,13 @@ Modified: 2026-04-10 - Made language-agnostic
 """
 
 from AI_agents.base_agent import BaseAgent
-from AI_agents.graph.state import OrchestraState
+from AI_agents.graph.state import OrchestraState, AgentStatus
+from AI_agents.utils.llm_client import get_llm_client
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableLambda
 import json
+import time
 from json_repair import repair_json
 import logging
 
@@ -51,6 +56,134 @@ class BackendAgent(BaseAgent):
 
     def get_llm_config(self) -> dict:
         return {"max_tokens": 8000}
+
+    # ------------------------------------------------------------------
+    # Per-file generation: overrides BaseAgent.run()
+    # ------------------------------------------------------------------
+
+    async def run(self, state: OrchestraState) -> OrchestraState:  # type: ignore[override]
+        """
+        Two-phase generation:
+          1. Ask the LLM for a file plan (list of filenames + purpose).
+          2. For each file, make a separate LLM call to generate its content.
+        This avoids JSON-truncation when the entire codebase is generated in
+        one shot (which easily exceeds 64K output tokens for non-trivial apps).
+        """
+        if self.output_field and state.get(self.output_field):
+            logger.info("[backend_agent] output already present, skipping")
+            state["completed_steps"].append(self.agent_name)
+            state["agent_statuses"][self.agent_name] = AgentStatus.COMPLETED
+            return state
+
+        state["current_step"] = self.agent_name
+        state["agent_statuses"][self.agent_name] = AgentStatus.RUNNING
+
+        provider = state.get("ai_provider", "anthropic")
+        llm = get_llm_client(provider, {"max_tokens": 2000})
+
+        design = state.get("design_yaml") or {}
+        stack = design.get("stack", {})
+        framework = stack.get("backend_framework", "FastAPI")
+        database = stack.get("database", "PostgreSQL")
+        app_name = design.get("app_name", "app")
+        description = design.get("description", "")
+        api_endpoints = state.get("api_schema", [])
+        db_entities = state.get("db_schema", [])
+
+        # ── Phase 1: file plan ────────────────────────────────────────
+        plan_prompt = f"""You are a {framework} architect.
+List the files needed for a minimal working backend for: {app_name} — {description}
+Framework: {framework}, Database: {database}
+Entities: {', '.join(e.get('name','') for e in db_entities)}
+Endpoints: {len(api_endpoints)} REST endpoints
+
+Return ONLY a JSON array of objects with keys "path" and "purpose". Max 8 files.
+Example: [{{"path":"backend/main.py","purpose":"entry point"}},...]"""
+
+        try:
+            plan_raw = await (
+                RunnableLambda(lambda _: [HumanMessage(content=plan_prompt)])
+                | llm
+                | StrOutputParser()
+            ).ainvoke({})
+            cleaned = plan_raw.strip()
+            if cleaned.startswith("```"):
+                lines = cleaned.split("\n")
+                cleaned = "\n".join(l for l in lines if not l.startswith("```"))
+            try:
+                file_plan = json.loads(cleaned)
+            except json.JSONDecodeError:
+                file_plan = json.loads(repair_json(cleaned))
+            if not isinstance(file_plan, list):
+                file_plan = file_plan.get("files", [])
+        except Exception as e:
+            logger.error("[backend_agent] file plan failed: %s", e)
+            state["errors"][self.agent_name] = f"File plan failed: {e}"
+            state["agent_statuses"][self.agent_name] = AgentStatus.FAILED
+            return state
+
+        logger.info("[backend_agent] file plan: %s", [f.get("path") for f in file_plan])
+
+        # ── Phase 2: generate each file ──────────────────────────────
+        llm_file = get_llm_client(provider, {"max_tokens": 4000})
+        backend_code: dict = {}
+
+        api_summary = "\n".join(
+            f"  {ep.get('method','GET')} {ep.get('path','/')}: {ep.get('description','')}"
+            for ep in api_endpoints
+        )
+        entity_summary = "\n".join(
+            f"  {e.get('name','')}: {', '.join(f.get('name','') for f in e.get('fields',[]))}"
+            for e in db_entities
+        )
+
+        for file_info in file_plan:
+            file_path = file_info.get("path", "")
+            purpose = file_info.get("purpose", "")
+            if not file_path:
+                continue
+
+            file_prompt = f"""Generate the file `{file_path}` for a {framework} + {database} backend.
+App: {app_name} — {description}
+
+Purpose of this file: {purpose}
+
+API endpoints (for context):
+{api_summary or '  (standard CRUD)'}
+
+Entities (for context):
+{entity_summary or '  User'}
+
+Rules:
+- Output ONLY the raw source code for this single file (no JSON wrapping, no markdown fences).
+- Max 150 lines. Complete and syntactically correct.
+- Include all necessary imports."""
+
+            for attempt in range(3):
+                try:
+                    t0 = time.monotonic()
+                    code = await (
+                        RunnableLambda(lambda _: [HumanMessage(content=file_prompt)])
+                        | llm_file
+                        | StrOutputParser()
+                    ).ainvoke({})
+                    logger.info("[backend_agent] %s generated in %.1fs", file_path, time.monotonic() - t0)
+                    # Strip accidental markdown fences
+                    if code.startswith("```"):
+                        lines = code.split("\n")
+                        code = "\n".join(l for l in lines if not l.startswith("```"))
+                    backend_code[file_path] = code.strip()
+                    break
+                except Exception as e:
+                    logger.warning("[backend_agent] file %s attempt %d failed: %s", file_path, attempt + 1, e)
+                    if attempt == 2:
+                        backend_code[file_path] = f"# Generation failed: {e}"
+
+        state["backend_code"] = backend_code
+        state["completed_steps"].append(self.agent_name)
+        state["agent_statuses"][self.agent_name] = AgentStatus.COMPLETED
+        logger.info("[backend_agent] completed — %d files", len(backend_code))
+        return state
 
     def system_prompt(self) -> str:
         return """You are an expert polyglot backend architect with deep knowledge of modern web frameworks across all major programming languages.

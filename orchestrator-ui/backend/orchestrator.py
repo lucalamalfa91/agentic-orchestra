@@ -22,7 +22,7 @@ try:
     from orchestrator_ui.backend.websocket import manager
     from orchestrator_ui.backend.encryption_service import decrypt
     from orchestrator_ui.backend.models import Configuration, User
-    from AI_agents.graph.graph import app as langgraph_app
+    from AI_agents.graph.graph import get_app
     from AI_agents.graph.state import OrchestraState, AgentStatus
 except ModuleNotFoundError:
     import sys
@@ -33,7 +33,7 @@ except ModuleNotFoundError:
     from websocket import manager
     from encryption_service import decrypt
     from models import Configuration, User
-    from AI_agents.graph.graph import app as langgraph_app
+    from AI_agents.graph.graph import get_app
     from AI_agents.graph.state import OrchestraState, AgentStatus
 
 
@@ -47,12 +47,13 @@ class GenerationOrchestrator:
 
     # Map agent node names to step information (preserves legacy format)
     AGENT_TO_STEP = {
-        "knowledge_retrieval": {"step": "readme",   "step_number": 1, "percentage": 16},
-        "design":              {"step": "design",   "step_number": 2, "percentage": 33},
-        "backend_agent":       {"step": "backend",  "step_number": 3, "percentage": 50},
-        "frontend_agent":      {"step": "frontend", "step_number": 4, "percentage": 67},
-        "devops_agent":        {"step": "devops",   "step_number": 5, "percentage": 83},
-        "publish_agent":       {"step": "publish",  "step_number": 6, "percentage": 100},
+        "knowledge_retrieval":  {"step": "readme",   "step_number": 1, "percentage": 16},
+        "design":               {"step": "design",   "step_number": 2, "percentage": 33},
+        "human_approval_gate":  {"step": "approved", "step_number": 3, "percentage": 40},
+        "backend_agent":        {"step": "backend",  "step_number": 4, "percentage": 55},
+        "frontend_agent":       {"step": "frontend", "step_number": 5, "percentage": 70},
+        "devops_agent":         {"step": "devops",   "step_number": 6, "percentage": 85},
+        "publish_agent":        {"step": "publish",  "step_number": 7, "percentage": 100},
     }
 
     def __init__(self, project_root: Path = None):
@@ -570,6 +571,10 @@ class GenerationOrchestrator:
             # Stream LangGraph execution
             current_step = "start"
             final_state = None
+            lg_config = {"configurable": {"thread_id": generation_id}}
+
+            # Resolve async-compiled app with checkpointer
+            langgraph_app = await get_app()
 
             # Pre-populate the expandable log section with queued/skipped status per step
             for node_name, step_info in self.AGENT_TO_STEP.items():
@@ -588,7 +593,7 @@ class GenerationOrchestrator:
 
             async for event in langgraph_app.astream(
                 initial_state,
-                config={"configurable": {"thread_id": generation_id}},
+                config=lg_config,
                 stream_mode="updates",
             ):
                 print(f"[LangGraph Event] {list(event.keys())}")
@@ -642,18 +647,47 @@ class GenerationOrchestrator:
                                 generation_id, step_info["step_number"], summary
                             )
 
-            print(f"[OK] LangGraph execution completed for project {project.id}")
+                # Store final state for error checking
+                for node_name, node_data in event.items():
+                    if isinstance(node_data, dict) and "errors" in node_data:
+                        final_state = node_data
 
+            print(f"[OK] LangGraph astream segment completed for project {project.id}")
+
+            # ------------------------------------------------------------------
+            # Check whether the graph paused at human_approval_gate interrupt
+            # ------------------------------------------------------------------
+            graph_state = await langgraph_app.aget_state(lg_config)
+            if graph_state.next:
+                logger.info("[orchestrator] Graph paused — next=%s", graph_state.next)
+                design_data = (final_state or {}).get("design_yaml") or {}
+                await manager.broadcast(generation_id, {
+                    "type": "approval_required",
+                    "step": "design",
+                    "step_number": 2,
+                    "percentage": 33,
+                    "message": "Architecture ready — review and approve to start code generation",
+                    "design": design_data,
+                    "project_id": project.id,
+                })
+                crud.create_generation_log(
+                    db=db, project_id=project.id,
+                    step_name="awaiting_approval", status="paused",
+                    message="Waiting for user approval before code generation",
+                    generation_attempt=generation_attempt
+                )
+                return project.id
+
+            # ------------------------------------------------------------------
             # Check for critical errors in final state
-            # Non-critical failures (backlog, publish) are logged but don't block success
-            CRITICAL_AGENTS = {"design", "backend_agent", "frontend_agent"}
+            # ------------------------------------------------------------------
+            from AI_agents.graph.graph import CRITICAL_AGENTS
             if final_state and final_state.get("errors"):
                 all_errors = final_state["errors"]
                 critical_errors = {a: m for a, m in all_errors.items() if m and a in CRITICAL_AGENTS}
-                non_critical_errors = {a: m for a, m in all_errors.items() if m and a not in CRITICAL_AGENTS}
-
-                if non_critical_errors:
-                    logger.warning("[orchestrator] Non-critical agent errors (ignored): %s", list(non_critical_errors.keys()))
+                non_critical = {a: m for a, m in all_errors.items() if m and a not in CRITICAL_AGENTS}
+                if non_critical:
+                    logger.warning("[orchestrator] Non-critical errors (ignored): %s", list(non_critical.keys()))
 
                 if critical_errors:
                     error_summary = ", ".join(f"{a}: {m}" for a, m in critical_errors.items())
@@ -674,7 +708,7 @@ class GenerationOrchestrator:
             # Success!
             crud.update_project_status(db, project.id, "completed")
             await self.broadcast_progress(
-                generation_id, "complete", 7, 100,
+                generation_id, "complete", 8, 100,
                 "App generation completed successfully!"
             )
             return project.id
@@ -701,6 +735,140 @@ class GenerationOrchestrator:
                 generation_id, "error", 0, 0, "Exception: " + str(e).replace("{", "{{").replace("}", "}}")
             )
             return None
+
+    async def resume_generation(
+        self,
+        generation_id: str,
+        db: Session,
+        project_id: int,
+        user_id: int,
+    ) -> Optional[int]:
+        """
+        Resume a generation that was paused at the human_approval_gate interrupt.
+        Called by the /approve endpoint after the user confirms the design.
+        """
+        ctx: dict = {"project": None, "generation_attempt": 1}
+        try:
+            return await asyncio.wait_for(
+                self._resume_generation_internal(generation_id, db, project_id, user_id, ctx),
+                timeout=1800,
+            )
+        except asyncio.TimeoutError:
+            logger.error("Resume of %s timed out", generation_id)
+            await self._close_websocket_gracefully(generation_id, 1011, "Generation timed out")
+            return None
+        except BaseException as e:
+            logger.error("Resume of %s failed: %s", generation_id, e)
+            await self._close_websocket_gracefully(generation_id, 1011, str(e)[:100])
+            return None
+
+    async def _resume_generation_internal(
+        self,
+        generation_id: str,
+        db: Session,
+        project_id: int,
+        user_id: int,
+        ctx: dict,
+    ) -> Optional[int]:
+        """Internal resume logic: astream(None) continues from the saved checkpoint."""
+        project = crud.get_project_by_id(db, project_id)
+        if not project:
+            raise ValueError(f"Project {project_id} not found")
+        ctx["project"] = project
+        generation_attempt = project.generation_attempt
+        ctx["generation_attempt"] = generation_attempt
+
+        # Re-inject env vars (tokens may have been evicted from os.environ)
+        if user_id:
+            self._inject_env_vars(db, user_id)
+
+        langgraph_app = await get_app()
+        lg_config = {"configurable": {"thread_id": generation_id}}
+
+        await self.broadcast_progress(
+            generation_id, "approved", 3, 40,
+            "Design approved — starting code generation..."
+        )
+        crud.create_generation_log(
+            db=db, project_id=project_id,
+            step_name="approved", status="started",
+            message="User approved design — resuming generation",
+            generation_attempt=generation_attempt
+        )
+
+        current_step = "approved"
+        final_state = None
+
+        async for event in langgraph_app.astream(
+            None,  # None = resume from checkpoint
+            config=lg_config,
+            stream_mode="updates",
+        ):
+            print(f"[LangGraph Resume Event] {list(event.keys())}")
+
+            for node_name, node_data in event.items():
+                if not isinstance(node_data, dict):
+                    continue
+                final_state = node_data
+                if node_name in self.ARTIFACT_MAP:
+                    fields = {
+                        f: node_data[f]
+                        for f in self.ARTIFACT_MAP[node_name]
+                        if node_data.get(f) is not None
+                    }
+                    if fields:
+                        try:
+                            crud.upsert_project_artifacts(
+                                db, project_id, generation_attempt, **fields
+                            )
+                        except Exception as ae:
+                            logger.warning("Failed to save artifacts for %s: %s", node_name, ae)
+
+            step_info = self._map_event_to_step_info(event)
+            if step_info:
+                current_step = step_info["step"]
+                crud.create_generation_log(
+                    db=db, project_id=project_id,
+                    step_name=current_step, status="completed",
+                    message=f"{current_step.capitalize()} step completed",
+                    generation_attempt=generation_attempt
+                )
+                await self.broadcast_progress(
+                    generation_id, current_step,
+                    step_info["step_number"], step_info["percentage"],
+                    f"{current_step.capitalize()} generation completed",
+                )
+                for node_name, node_data in event.items():
+                    if node_name in self.AGENT_TO_STEP and isinstance(node_data, dict):
+                        summary = self._summarize_node_output(node_name, node_data)
+                        await manager.broadcast_log(
+                            generation_id, step_info["step_number"], summary
+                        )
+
+        print(f"[OK] LangGraph resume completed for project {project_id}")
+
+        from AI_agents.graph.graph import CRITICAL_AGENTS
+        if final_state and final_state.get("errors"):
+            all_errors = final_state["errors"]
+            critical_errors = {a: m for a, m in all_errors.items() if m and a in CRITICAL_AGENTS}
+            non_critical = {a: m for a, m in all_errors.items() if m and a not in CRITICAL_AGENTS}
+            if non_critical:
+                logger.warning("Non-critical errors (ignored): %s", list(non_critical.keys()))
+            if critical_errors:
+                error_summary = ", ".join(f"{a}: {m}" for a, m in critical_errors.items())
+                crud.update_project_status(db, project_id, "failed")
+                await self.broadcast_progress(
+                    generation_id, "error", 0, 0,
+                    f"Generation failed: {error_summary[:400]}"
+                )
+                return None
+
+        crud.update_project_status(db, project_id, "completed")
+        await self.broadcast_progress(
+            generation_id, "complete", 8, 100,
+            "App generation completed successfully!"
+        )
+        return project_id
 
 
 def generate_id() -> str:
